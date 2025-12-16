@@ -1,9 +1,9 @@
-import { Guest, Family, SortOption } from './types';
+import { Guest, Family, CategoryInfo } from './types';
 
 const API_BASE = '/api';
 
-export async function fetchGuests(sortBy: SortOption = 'lastName'): Promise<Guest[]> {
-  const response = await fetch(`${API_BASE}/guests?sortBy=${sortBy}`);
+export async function fetchGuests(): Promise<Guest[]> {
+  const response = await fetch(`${API_BASE}/guests`);
   if (!response.ok) throw new Error('Failed to fetch guests');
   return response.json();
 }
@@ -70,4 +70,27 @@ export async function removeGuestFromFamily(familyId: string, guestId: string): 
   });
   if (!response.ok) throw new Error('Failed to remove guest from family');
   return response.json();
+}
+
+export async function fetchCategories(): Promise<CategoryInfo[]> {
+  const response = await fetch(`${API_BASE}/categories`);
+  if (!response.ok) throw new Error('Failed to fetch categories');
+  return response.json();
+}
+
+export async function addCategory(name: string): Promise<CategoryInfo> {
+  const response = await fetch(`${API_BASE}/categories`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) throw new Error('Failed to add category');
+  return response.json();
+}
+
+export async function deleteCategory(name: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/categories/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) throw new Error('Failed to delete category');
 }

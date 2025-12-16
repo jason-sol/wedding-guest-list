@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { store } from '../store';
 import { Family, Guest } from '../../../shared/types/index';
+import { capitalizeWords } from '../../../shared/utils/capitalize';
 
 const router = Router();
 
@@ -32,10 +33,10 @@ router.post('/', (req: Request, res: Response) => {
   if (Array.isArray(members)) {
     for (const member of members) {
       if (typeof member === 'object' && member.firstName && member.lastName) {
-        // Create guest and add to family
+        // Create guest and add to family (capitalize names)
         const guest = store.addGuest({
-          firstName: member.firstName,
-          lastName: member.lastName,
+          firstName: capitalizeWords(member.firstName.trim()),
+          lastName: capitalizeWords(member.lastName.trim()),
           familyId: null, // Will be set after family is created
           tags: member.tags || [],
         });
@@ -48,7 +49,7 @@ router.post('/', (req: Request, res: Response) => {
   }
 
   const family = store.addFamily({
-    name,
+    name: capitalizeWords(name.trim()),
     members: memberIds,
   });
 
@@ -65,7 +66,7 @@ router.put('/:id', (req: Request, res: Response) => {
   const { name, members } = req.body;
   
   const updates: Partial<Family> = {};
-  if (name !== undefined) updates.name = name;
+  if (name !== undefined) updates.name = capitalizeWords(name.trim());
   if (members !== undefined) updates.members = members;
 
   const updated = store.updateFamily(req.params.id, updates);

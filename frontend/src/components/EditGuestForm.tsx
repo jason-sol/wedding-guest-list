@@ -1,20 +1,27 @@
-import { useState } from 'react';
-import { Category, CategoryInfo } from '../types';
-import { addGuest } from '../api';
+import { useState, useEffect } from 'react';
+import { Guest, Category, CategoryInfo } from '../types';
+import { updateGuest } from '../api';
 import CategoryDropdown from './CategoryDropdown';
 import './GuestForm.css';
 
-interface GuestFormProps {
+interface EditGuestFormProps {
+  guest: Guest;
+  categories: CategoryInfo[];
   onClose: () => void;
   onSuccess: () => void;
-  categories: CategoryInfo[];
 }
 
-export default function GuestForm({ onClose, onSuccess, categories }: GuestFormProps) {
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [selectedTags, setSelectedTags] = useState<Category[]>([]);
+export default function EditGuestForm({ guest, categories, onClose, onSuccess }: EditGuestFormProps) {
+  const [firstName, setFirstName] = useState(guest.firstName);
+  const [lastName, setLastName] = useState(guest.lastName);
+  const [selectedTags, setSelectedTags] = useState<Category[]>(guest.tags || []);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setFirstName(guest.firstName);
+    setLastName(guest.lastName);
+    setSelectedTags(guest.tags || []);
+  }, [guest]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,16 +33,15 @@ export default function GuestForm({ onClose, onSuccess, categories }: GuestFormP
 
     setIsSubmitting(true);
     try {
-      await addGuest({
+      await updateGuest(guest.id, {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
-        familyId: null,
         tags: selectedTags,
       });
       onSuccess();
     } catch (error) {
-      console.error('Failed to add guest:', error);
-      alert('Failed to add guest');
+      console.error('Failed to update guest:', error);
+      alert('Failed to update guest');
     } finally {
       setIsSubmitting(false);
     }
@@ -46,7 +52,7 @@ export default function GuestForm({ onClose, onSuccess, categories }: GuestFormP
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Add Guest</h2>
+          <h2>Edit Guest</h2>
           <button className="close-button" onClick={onClose}>×</button>
         </div>
         
@@ -92,7 +98,7 @@ export default function GuestForm({ onClose, onSuccess, categories }: GuestFormP
               Cancel
             </button>
             <button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Adding...' : 'Add Guest'}
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </form>

@@ -1,4 +1,68 @@
 {
   "guests": [],
-  "families": []
+  "families": [
+    {
+      "name": "Solanki",
+      "members": [
+        "guest-4",
+        "guest-1",
+        "guest-3"
+      ],
+      "id": "family-1"
+    },
+    {
+      "name": "asdasd",
+      "members": [
+        "guest-5",
+        "guest-6"
+      ],
+      "id": "family-2"
+    }
+  ],
+  "categories": [
+    {
+      "name": "Bridal Party",
+      "color": "#2980B9"
+    },
+    {
+      "name": "Bride Family",
+      "color": "#34495E"
+    },
+    {
+      "name": "Groom Family",
+      "color": "#D68910"
+    },
+    {
+      "name": "Church Friends",
+      "color": "#E67E22"
+    },
+    {
+      "name": "Church Families",
+      "color": "#E91E63"
+    },
+    {
+      "name": "Sophie High School",
+      "color": "#34495E"
+    },
+    {
+      "name": "Jason High School",
+      "color": "#3498DB"
+    },
+    {
+      "name": "Jason UNSW",
+      "color": "#2ECC71"
+    },
+    {
+      "name": "Jason Other",
+      "color": "#E74C3C"
+    },
+    {
+      "name": "Sophie Other",
+      "color": "#9B59B6"
+    },
+    {
+      "name": "Sophie Uts",
+      "color": "#1ABC9C"
+    }
+  ]
 }

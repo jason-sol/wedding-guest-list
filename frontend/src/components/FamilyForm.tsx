@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Category, CATEGORIES } from '../types';
+import { Category, CategoryInfo } from '../types';
 import { addFamily } from '../api';
-import CategoryTag from './CategoryTag';
+import CategoryDropdown from './CategoryDropdown';
 import './FamilyForm.css';
 
 interface FamilyFormProps {
   onClose: () => void;
   onSuccess: () => void;
+  categories: CategoryInfo[];
 }
 
 interface FamilyMember {
@@ -14,7 +15,7 @@ interface FamilyMember {
   lastName: string;
 }
 
-export default function FamilyForm({ onClose, onSuccess }: FamilyFormProps) {
+export default function FamilyForm({ onClose, onSuccess, categories }: FamilyFormProps) {
   const [familyName, setFamilyName] = useState('');
   const [members, setMembers] = useState<FamilyMember[]>([
     { firstName: '', lastName: '' },
@@ -72,13 +73,6 @@ export default function FamilyForm({ onClose, onSuccess }: FamilyFormProps) {
     setMembers(updated);
   };
 
-  const toggleTag = (tag: Category) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag)
-        ? prev.filter((t) => t !== tag)
-        : [...prev, tag]
-    );
-  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -142,35 +136,19 @@ export default function FamilyForm({ onClose, onSuccess }: FamilyFormProps) {
             </button>
           </div>
 
-          <div className="form-group">
-            <label>Categories (applied to all members)</label>
-            <div className="category-selector">
-              {CATEGORIES.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  className={`category-option ${
-                    selectedTags.includes(category) ? 'selected' : ''
-                  }`}
-                  onClick={() => toggleTag(category)}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
-            {selectedTags.length > 0 && (
-              <div className="selected-tags">
-                {selectedTags.map((tag) => (
-                  <CategoryTag
-                    key={tag}
-                    category={tag}
-                    removable
-                    onRemove={() => toggleTag(tag)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+          <CategoryDropdown
+            categories={categories}
+            selectedCategories={selectedTags}
+            onSelect={(category) => {
+              if (!selectedTags.includes(category)) {
+                setSelectedTags([...selectedTags, category]);
+              }
+            }}
+            onRemove={(category) => {
+              setSelectedTags(selectedTags.filter(t => t !== category));
+            }}
+            label="Categories (applied to all members)"
+          />
 
           <div className="form-actions">
             <button type="button" onClick={onClose} disabled={isSubmitting}>

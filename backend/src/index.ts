@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import guestsRouter from './routes/guests';
 import familiesRouter from './routes/families';
+import categoriesRouter from './routes/categories';
 import rsvpRouter from './routes/rsvp';
 import eventsRouter from './routes/events';
 
@@ -13,6 +14,7 @@ app.use(express.json());
 
 app.use('/api/guests', guestsRouter);
 app.use('/api/families', familiesRouter);
+app.use('/api/categories', categoriesRouter);
 app.use('/api', rsvpRouter);
 app.use('/api/events', eventsRouter);
 

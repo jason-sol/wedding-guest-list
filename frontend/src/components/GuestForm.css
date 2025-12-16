@@ -143,3 +143,52 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+.input-error {
+  border-color: #d32f2f !important;
+}
+
+.existing-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.category-item-with-delete {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.delete-category-button {
+  background: #f44336;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 0.2s;
+  flex-shrink: 0;
+}
+
+.delete-category-button:hover:not(:disabled) {
+  background: #d32f2f;
+}
+
+.delete-category-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

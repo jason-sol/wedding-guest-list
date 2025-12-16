@@ -1,18 +1,43 @@
-import { Guest, Family } from '../../shared/types/index';
+import { Guest, Family, CategoryInfo } from '../../shared/types/index';
+import { getCategoryColor } from '../../shared/utils/colors';
+import { capitalizeWords } from '../../shared/utils/capitalize';
 import * as fs from 'fs';
 import * as path from 'path';
 
 const DATA_FILE = path.join(__dirname, '../../data.json');
 
+// Default categories
+const DEFAULT_CATEGORIES: CategoryInfo[] = [
+  { name: 'Bridal Party', color: getCategoryColor('Bridal Party') },
+  { name: 'Bride Family', color: getCategoryColor('Bride Family') },
+  { name: 'Groom Family', color: getCategoryColor('Groom Family') },
+  { name: 'Church Friends', color: getCategoryColor('Church Friends') },
+  { name: 'Church Families', color: getCategoryColor('Church Families') },
+  { name: 'Sophie UTS', color: getCategoryColor('Sophie UTS') },
+  { name: 'Sophie High School', color: getCategoryColor('Sophie High School') },
+  { name: 'Sophie Other', color: getCategoryColor('Sophie Other') },
+  { name: 'Jason High School', color: getCategoryColor('Jason High School') },
+  { name: 'Jason UNSW', color: getCategoryColor('Jason UNSW') },
+  { name: 'Jason Other', color: getCategoryColor('Jason Other') },
+];
+
 // Simple in-memory data store with JSON file persistence
 class DataStore {
   private guests: Map<string, Guest> = new Map();
   private families: Map<string, Family> = new Map();
+  private categories: Map<string, CategoryInfo> = new Map();
   private nextGuestId = 1;
   private nextFamilyId = 1;
 
   constructor() {
+    this.initializeDefaultCategories();
     this.loadFromFile();
+  }
+
+  private initializeDefaultCategories(): void {
+    DEFAULT_CATEGORIES.forEach(cat => {
+      this.categories.set(cat.name.toLowerCase(), cat);
+    });
   }
 
   private loadFromFile(): void {
@@ -41,6 +66,16 @@ class DataStore {
             }
           });
         }
+
+        // Load categories
+        if (data.categories && Array.isArray(data.categories)) {
+          data.categories.forEach((category: CategoryInfo) => {
+            this.categories.set(category.name.toLowerCase(), category);
+          });
+        } else {
+          // If no categories in file, use defaults
+          this.initializeDefaultCategories();
+        }
       }
     } catch (error) {
       console.error('Error loading data from file:', error);
@@ -57,6 +92,7 @@ class DataStore {
       const data = {
         guests: Array.from(this.guests.values()),
         families: Array.from(this.families.values()),
+        categories: Array.from(this.categories.values()),
       };
 
       fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
@@ -133,12 +169,39 @@ class DataStore {
     return deleted;
   }
 
+  // Category operations
+  getAllCategories(): CategoryInfo[] {
+    return Array.from(this.categories.values()).sort((a, b) => 
+      a.name.localeCompare(b.name)
+    );
+  }
+
+  getCategory(name: string): CategoryInfo | undefined {
+    return this.categories.get(name.toLowerCase());
+  }
+
+  addCategory(category: CategoryInfo): CategoryInfo {
+    this.categories.set(category.name.toLowerCase(), category);
+    this.saveToFile();
+    return category;
+  }
+
+  deleteCategory(name: string): boolean {
+    const deleted = this.categories.delete(name.toLowerCase());
+    if (deleted) {
+      this.saveToFile();
+    }
+    return deleted;
+  }
+
   // Clear all data (useful for testing)
   clear(): void {
     this.guests.clear();
     this.families.clear();
+    this.categories.clear();
     this.nextGuestId = 1;
     this.nextFamilyId = 1;
+    this.initializeDefaultCategories();
     if (fs.existsSync(DATA_FILE)) {
       fs.unlinkSync(DATA_FILE);
     }

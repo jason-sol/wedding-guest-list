@@ -39,6 +39,78 @@ body {
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  gap: 20px;
+}
+
+.category-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.category-filter label {
+  font-weight: 500;
+  color: #333;
+  font-size: 14px;
+}
+
+.category-filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.category-filter-pill {
+  border: 2px solid transparent;
+  border-radius: 20px;
+  padding: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.category-filter-pill:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.category-filter-pill.selected {
+  border-color: #4CAF50;
+  background-color: #4CAF50;
+  box-shadow: 0 2px 6px rgba(76, 175, 80, 0.4);
+}
+
+.category-filter-pill.selected .category-tag {
+  background-color: #4CAF50 !important;
+  color: white !important;
+}
+
+.clear-filter-button {
+  padding: 6px 12px;
+  background-color: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 16px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s;
+  margin-left: 8px;
+}
+
+.clear-filter-button:hover {
+  background-color: #e0e0e0;
+  border-color: #bbb;
+}
+
+.no-categories {
+  color: #666;
+  font-style: italic;
+  font-size: 14px;
 }
 
 .action-buttons {
@@ -59,6 +131,14 @@ body {
 
 .action-buttons button:hover {
   background-color: #45a049;
+}
+
+.action-buttons .category-button {
+  background-color: #9B59B6;
+}
+
+.action-buttons .category-button:hover {
+  background-color: #8E44AD;
 }
 
 .loading-state {

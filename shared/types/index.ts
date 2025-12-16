@@ -1,16 +1,11 @@
-// Category types for organizing guests
-export type Category =
-  | "Bridal Party"
-  | "Bride Family"
-  | "Groom Family"
-  | "Church Friends"
-  | "Church Families"
-  | "Sophie UTS"
-  | "Sophie High School"
-  | "Sophie Other"
-  | "Jason High School"
-  | "Jason UNSW"
-  | "Jason Other";
+// Category is now a dynamic string type
+export type Category = string;
+
+// Category with color information
+export interface CategoryInfo {
+  name: string;
+  color: string;
+}
 
 // RSVP status
 export type RSVPStatus = "pending" | "accepted" | "declined";
@@ -45,8 +40,4 @@ export interface Event {
   location?: string;
 }
 
-// Sort options
-export type SortOption = "firstName" | "lastName" | "category";
-
-// View mode
-export type ViewMode = "family" | "individual";
+// Sort options - removed, always sort by last name
