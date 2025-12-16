@@ -7,9 +7,12 @@ const router = Router();
 
 // Helper function to sort guests by last name
 function sortGuests(guests: Guest[]): Guest[] {
-  return [...guests].sort((a, b) => 
-    a.lastName.localeCompare(b.lastName)
-  );
+  return [...guests].sort((a, b) => {
+    // Handle guests without last names (put them at the end)
+    const aLastName = a.lastName || '';
+    const bLastName = b.lastName || '';
+    return aLastName.localeCompare(bLastName);
+  });
 }
 
 // GET /api/guests - Get all guests sorted by last name

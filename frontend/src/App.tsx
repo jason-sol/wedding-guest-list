@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Guest, Family, CategoryInfo } from './types';
-import { fetchGuests, fetchFamilies, fetchCategories, checkAuth, logout } from './api';
+import { fetchGuests, fetchFamilies, fetchCategories, checkAuth, logout, exportData, importData } from './api';
 import GuestList from './components/GuestList';
 import GuestForm from './components/GuestForm';
 import FamilyForm from './components/FamilyForm';
@@ -108,6 +108,61 @@ function App() {
     setGuests([]);
     setFamilies([]);
     setCategories([]);
+  };
+
+  const handleExport = async () => {
+    try {
+      const blob = await exportData();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wedding-guest-list-data-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      alert('Data exported successfully!');
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Failed to export data. Please try again.');
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.json')) {
+      alert('Please select a JSON file');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'Importing data will replace all current guests, families, and categories. Are you sure you want to continue?'
+    );
+
+    if (!confirmed) {
+      e.target.value = ''; // Reset file input
+      return;
+    }
+
+    try {
+      const result = await importData(file);
+      alert(
+        `Data imported successfully!\n` +
+        `- Guests: ${result.imported.guests}\n` +
+        `- Families: ${result.imported.families}\n` +
+        `- Categories: ${result.imported.categories}`
+      );
+      // Reload data to show imported content
+      loadData(false);
+      // Reset file input
+      e.target.value = '';
+    } catch (error) {
+      console.error('Import failed:', error);
+      alert(error instanceof Error ? error.message : 'Failed to import data. Please check the file format.');
+      e.target.value = ''; // Reset file input
+    }
   };
 
   // Filter guests by active tab (must be before any conditional returns)
@@ -219,7 +274,7 @@ function App() {
             </div>
           </div>
           
-          <div className="action-buttons">
+          <div className="action-buttons-left">
             <button onClick={() => setShowGuestForm(true)}>
               Add Guest
             </button>
@@ -232,6 +287,23 @@ function App() {
             >
               Add/Remove Category
             </button>
+          </div>
+          <div className="action-buttons-right">
+            <button 
+              className="export-button"
+              onClick={handleExport}
+            >
+              Export Data
+            </button>
+            <label className="import-button-label">
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleImport}
+                style={{ display: 'none' }}
+              />
+              <span className="import-button">Import Data</span>
+            </label>
           </div>
         </div>
         

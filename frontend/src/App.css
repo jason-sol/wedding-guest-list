@@ -251,12 +251,23 @@ body {
   font-size: 14px;
 }
 
-.action-buttons {
+.action-buttons-left,
+.action-buttons-right {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
-.action-buttons button {
+.action-buttons-left {
+  flex: 1;
+}
+
+.action-buttons-right {
+  margin-left: auto;
+}
+
+.action-buttons-left button,
+.action-buttons-right button {
   padding: 10px 20px;
   background-color: #4CAF50;
   color: white;
@@ -267,16 +278,52 @@ body {
   transition: background-color 0.3s;
 }
 
-.action-buttons button:hover {
+.action-buttons-left button:hover,
+.action-buttons-right button:hover {
   background-color: #45a049;
 }
 
-.action-buttons .category-button {
+.action-buttons-left .category-button {
   background-color: #9B59B6;
 }
 
-.action-buttons .category-button:hover {
+.action-buttons-left .category-button:hover {
   background-color: #8E44AD;
+}
+
+.action-buttons-right .export-button {
+  background-color: #2196F3;
+}
+
+.action-buttons-right .export-button:hover {
+  background-color: #1976d2;
+}
+
+.import-button-label {
+  display: inline-block;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.import-button-label input[type="file"] {
+  display: none;
+}
+
+.import-button {
+  display: inline-block;
+  padding: 10px 20px;
+  background-color: #9C27B0;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.3s;
+}
+
+.import-button-label:hover .import-button {
+  background-color: #7B1FA2;
 }
 
 .loading-state {

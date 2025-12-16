@@ -224,3 +224,32 @@ export async function checkAuth(): Promise<boolean> {
 export function getAuthToken(): string | null {
   return localStorage.getItem('authToken');
 }
+
+// Export data
+export async function exportData(): Promise<Blob> {
+  const response = await fetch(`${API_BASE}/data/export`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+  handleAuthError(response);
+  if (!response.ok) throw new Error('Failed to export data');
+  return response.blob();
+}
+
+// Import data
+export async function importData(file: File): Promise<{ message: string; imported: { guests: number; families: number; categories: number } }> {
+  const fileContent = await file.text();
+  const data = JSON.parse(fileContent);
+  
+  const response = await fetch(`${API_BASE}/data/import`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  handleAuthError(response);
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Failed to import data');
+  }
+  return response.json();
+}

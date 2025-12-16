@@ -22,6 +22,7 @@ import categoriesRouter from './routes/categories';
 import rsvpRouter from './routes/rsvp';
 import eventsRouter from './routes/events';
 import authRouter from './routes/auth';
+import dataRouter from './routes/data';
 import { authMiddleware } from './middleware/auth';
 
 const app = express();
@@ -42,6 +43,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/guests', authMiddleware, guestsRouter);
 app.use('/api/families', authMiddleware, familiesRouter);
 app.use('/api/categories', authMiddleware, categoriesRouter);
+app.use('/api/data', authMiddleware, dataRouter);
 app.use('/api', authMiddleware, rsvpRouter);
 app.use('/api/events', authMiddleware, eventsRouter);
 

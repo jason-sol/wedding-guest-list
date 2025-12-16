@@ -206,6 +206,44 @@ class DataStore {
       fs.unlinkSync(DATA_FILE);
     }
   }
+
+  // Import data with existing IDs (for data import feature)
+  importData(data: { guests: Guest[]; families: Family[]; categories: CategoryInfo[] }): void {
+    // Clear existing data
+    this.guests.clear();
+    this.families.clear();
+    this.categories.clear();
+
+    // Import categories
+    data.categories.forEach((category) => {
+      this.categories.set(category.name.toLowerCase(), category);
+    });
+
+    // Import guests (preserve IDs)
+    let maxGuestId = 0;
+    data.guests.forEach((guest) => {
+      this.guests.set(guest.id, guest);
+      const idNum = parseInt(guest.id.replace('guest-', ''));
+      if (idNum >= maxGuestId) {
+        maxGuestId = idNum + 1;
+      }
+    });
+    this.nextGuestId = maxGuestId;
+
+    // Import families (preserve IDs)
+    let maxFamilyId = 0;
+    data.families.forEach((family) => {
+      this.families.set(family.id, family);
+      const idNum = parseInt(family.id.replace('family-', ''));
+      if (idNum >= maxFamilyId) {
+        maxFamilyId = idNum + 1;
+      }
+    });
+    this.nextFamilyId = maxFamilyId;
+
+    // Save to file
+    this.saveToFile();
+  }
 }
 
 export const store = new DataStore();
