@@ -4,7 +4,7 @@ import { capitalizeWords } from '../../shared/utils/capitalize';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const DATA_FILE = path.join(__dirname, '../../data.json');
+const DATA_FILE = path.join(__dirname, '../../data/data.json');
 
 // Default categories
 const DEFAULT_CATEGORIES: CategoryInfo[] = [

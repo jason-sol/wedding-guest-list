@@ -39,6 +39,7 @@ router.post('/', (req: Request, res: Response) => {
           lastName: capitalizeWords(member.lastName.trim()),
           familyId: null, // Will be set after family is created
           tags: member.tags || [],
+          reception: member.reception === true || member.reception === 'true',
         });
         memberIds.push(guest.id);
       } else if (typeof member === 'string') {
@@ -70,6 +71,35 @@ router.put('/:id', (req: Request, res: Response) => {
   if (members !== undefined) updates.members = members;
 
   const updated = store.updateFamily(req.params.id, updates);
+  
+  if (!updated) {
+    return res.status(404).json({ error: 'Family not found' });
+  }
+
+  res.json(updated);
+});
+
+// PUT /api/families/:id/members/reorder - Reorder family members
+router.put('/:id/members/reorder', (req: Request, res: Response) => {
+  const { memberIds } = req.body;
+  
+  if (!Array.isArray(memberIds)) {
+    return res.status(400).json({ error: 'memberIds must be an array' });
+  }
+
+  const family = store.getFamily(req.params.id);
+  if (!family) {
+    return res.status(404).json({ error: 'Family not found' });
+  }
+
+  // Validate all member IDs exist in the family
+  const invalidIds = memberIds.filter(id => !family.members.includes(id));
+  if (invalidIds.length > 0) {
+    return res.status(400).json({ error: `Invalid member IDs: ${invalidIds.join(', ')}` });
+  }
+
+  // Update family with new member order
+  const updated = store.updateFamily(req.params.id, { members: memberIds });
   
   if (!updated) {
     return res.status(404).json({ error: 'Family not found' });

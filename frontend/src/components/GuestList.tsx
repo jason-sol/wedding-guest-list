@@ -9,6 +9,7 @@ interface GuestListProps {
   families: Family[];
   categories: CategoryInfo[];
   selectedCategories: string[];
+  searchTerm: string;
   onUpdate: () => void;
 }
 
@@ -17,6 +18,7 @@ export default function GuestList({
   families,
   categories,
   selectedCategories,
+  searchTerm,
   onUpdate,
 }: GuestListProps) {
   const [removeMode, setRemoveMode] = useState(false);
@@ -25,13 +27,48 @@ export default function GuestList({
   const safeGuests = Array.isArray(guests) ? guests : [];
   const safeFamilies = Array.isArray(families) ? families : [];
   
-  // Filter guests by selected categories (guests must have at least one of the selected categories)
+  // Filter guests by selected categories and search term
   const filteredGuests = useMemo(() => {
-    if (selectedCategories.length === 0) return safeGuests;
-    return safeGuests.filter(guest => 
-      selectedCategories.some(cat => guest.tags.includes(cat))
-    );
-  }, [safeGuests, selectedCategories]);
+    let filtered = safeGuests;
+    
+    // Filter by categories
+    if (selectedCategories.length > 0) {
+      filtered = filtered.filter(guest => 
+        selectedCategories.some(cat => guest.tags.includes(cat))
+      );
+    }
+    
+    // Filter by search term
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase().trim();
+      filtered = filtered.filter(guest => {
+        const fullName = `${guest.firstName} ${guest.lastName}`.toLowerCase();
+        return fullName.includes(searchLower);
+      });
+    }
+    
+    return filtered;
+  }, [safeGuests, selectedCategories, searchTerm]);
+  
+  // Filter families by search term
+  const filteredFamilies = useMemo(() => {
+    if (!searchTerm.trim()) return safeFamilies;
+    
+    const searchLower = searchTerm.toLowerCase().trim();
+    return safeFamilies.filter(family => {
+      // Check if family name matches
+      if (family.name.toLowerCase().includes(searchLower)) {
+        return true;
+      }
+      // Check if any family member's name matches
+      return family.members.some(memberId => {
+        const member = safeGuests.find(g => g.id === memberId);
+        if (!member) return false;
+        const fullName = `${member.firstName} ${member.lastName}`.toLowerCase();
+        return fullName.includes(searchLower);
+      });
+    });
+  }, [safeFamilies, safeGuests, searchTerm]);
 
   // Create a map of familyId -> first member's last name for sorting
   const familyLastNameMap = new Map<string, string>();
@@ -42,7 +79,7 @@ export default function GuestList({
   });
 
   // Sort families by the last name of their first member
-  const sortedFamilies = safeFamilies
+  const sortedFamilies = filteredFamilies
     .filter(f => {
       // Only include families that have at least one guest in filtered list
       return filteredGuests.some(g => g.familyId === f.id);
@@ -105,7 +142,9 @@ export default function GuestList({
       {filteredGuests.length === 0 ? (
         <div className="empty-state">
           <p>
-            {selectedCategories.length > 0
+            {searchTerm.trim()
+              ? `No guests or families found matching "${searchTerm}".`
+              : selectedCategories.length > 0
               ? `No guests found in selected categories.` 
               : 'No guests yet. Add your first guest to get started!'}
           </p>
@@ -119,6 +158,7 @@ export default function GuestList({
                   key={item.family.id}
                   family={item.family}
                   guests={filteredGuests}
+                  allGuests={safeGuests}
                   categories={categories}
                   onUpdate={onUpdate}
                   removeMode={removeMode}

@@ -103,11 +103,13 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 16px;
 }
 
 .form-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   gap: 12px;
   margin-top: 24px;
 }
@@ -191,4 +193,54 @@
 .delete-category-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.delete-guest-button {
+  background: #f44336 !important;
+  color: white !important;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.3s;
+}
+
+.delete-guest-button:hover:not(:disabled) {
+  background: #d32f2f !important;
+}
+
+.delete-guest-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.reception-checkbox-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 20px;
+  background: #f5f5f5;
+  border-radius: 24px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border: 1px solid #e0e0e0;
+}
+
+.reception-checkbox-pill:hover {
+  background: #eeeeee;
+}
+
+.reception-checkbox-pill input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.reception-checkbox-pill span {
+  font-size: 16px;
+  color: #333;
+  font-weight: 500;
+  margin-left: 16px;
 }

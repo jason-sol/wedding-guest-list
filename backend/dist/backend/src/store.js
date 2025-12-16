@@ -34,17 +34,39 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.store = void 0;
+const colors_1 = require("../../shared/utils/colors");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
-const DATA_FILE = path.join(__dirname, '../../data.json');
+const DATA_FILE = path.join(__dirname, '../../data/data.json');
+// Default categories
+const DEFAULT_CATEGORIES = [
+    { name: 'Bridal Party', color: (0, colors_1.getCategoryColor)('Bridal Party') },
+    { name: 'Bride Family', color: (0, colors_1.getCategoryColor)('Bride Family') },
+    { name: 'Groom Family', color: (0, colors_1.getCategoryColor)('Groom Family') },
+    { name: 'Church Friends', color: (0, colors_1.getCategoryColor)('Church Friends') },
+    { name: 'Church Families', color: (0, colors_1.getCategoryColor)('Church Families') },
+    { name: 'Sophie UTS', color: (0, colors_1.getCategoryColor)('Sophie UTS') },
+    { name: 'Sophie High School', color: (0, colors_1.getCategoryColor)('Sophie High School') },
+    { name: 'Sophie Other', color: (0, colors_1.getCategoryColor)('Sophie Other') },
+    { name: 'Jason High School', color: (0, colors_1.getCategoryColor)('Jason High School') },
+    { name: 'Jason UNSW', color: (0, colors_1.getCategoryColor)('Jason UNSW') },
+    { name: 'Jason Other', color: (0, colors_1.getCategoryColor)('Jason Other') },
+];
 // Simple in-memory data store with JSON file persistence
 class DataStore {
     constructor() {
         this.guests = new Map();
         this.families = new Map();
+        this.categories = new Map();
         this.nextGuestId = 1;
         this.nextFamilyId = 1;
+        this.initializeDefaultCategories();
         this.loadFromFile();
+    }
+    initializeDefaultCategories() {
+        DEFAULT_CATEGORIES.forEach(cat => {
+            this.categories.set(cat.name.toLowerCase(), cat);
+        });
     }
     loadFromFile() {
         try {
@@ -70,6 +92,16 @@ class DataStore {
                         }
                     });
                 }
+                // Load categories
+                if (data.categories && Array.isArray(data.categories)) {
+                    data.categories.forEach((category) => {
+                        this.categories.set(category.name.toLowerCase(), category);
+                    });
+                }
+                else {
+                    // If no categories in file, use defaults
+                    this.initializeDefaultCategories();
+                }
             }
         }
         catch (error) {
@@ -85,6 +117,7 @@ class DataStore {
             const data = {
                 guests: Array.from(this.guests.values()),
                 families: Array.from(this.families.values()),
+                categories: Array.from(this.categories.values()),
             };
             fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
         }
@@ -152,12 +185,33 @@ class DataStore {
         }
         return deleted;
     }
+    // Category operations
+    getAllCategories() {
+        return Array.from(this.categories.values()).sort((a, b) => a.name.localeCompare(b.name));
+    }
+    getCategory(name) {
+        return this.categories.get(name.toLowerCase());
+    }
+    addCategory(category) {
+        this.categories.set(category.name.toLowerCase(), category);
+        this.saveToFile();
+        return category;
+    }
+    deleteCategory(name) {
+        const deleted = this.categories.delete(name.toLowerCase());
+        if (deleted) {
+            this.saveToFile();
+        }
+        return deleted;
+    }
     // Clear all data (useful for testing)
     clear() {
         this.guests.clear();
         this.families.clear();
+        this.categories.clear();
         this.nextGuestId = 1;
         this.nextFamilyId = 1;
+        this.initializeDefaultCategories();
         if (fs.existsSync(DATA_FILE)) {
             fs.unlinkSync(DATA_FILE);
         }

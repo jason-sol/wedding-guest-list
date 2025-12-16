@@ -13,11 +13,34 @@ WORKDIR /app/backend
 # Install dependencies
 RUN npm ci
 
+# Verify shared directory is accessible
+RUN echo "Checking shared directory..." && \
+    ls -la ../shared && \
+    ls -la ../shared/types && \
+    ls -la ../shared/utils || (echo "ERROR: Shared directory not found!" && exit 1)
+
 # Copy source files
 COPY backend/src ./src
 
-# Build TypeScript
-RUN npm run build
+# Verify source files and shared imports
+RUN echo "Verifying source files..." && \
+    ls -la src/ && \
+    echo "Checking if shared imports can be resolved..." && \
+    test -f ../shared/types/index.ts || (echo "ERROR: shared/types/index.ts not found!" && exit 1) && \
+    test -f ../shared/utils/colors.ts || (echo "ERROR: shared/utils/colors.ts not found!" && exit 1) && \
+    test -f ../shared/utils/capitalize.ts || (echo "ERROR: shared/utils/capitalize.ts not found!" && exit 1)
+
+# Build TypeScript with verbose output
+RUN echo "Starting TypeScript build..." && \
+    npm run build 2>&1 | tee /tmp/build.log && \
+    echo "Build completed. Checking output..." && \
+    ls -la && \
+    echo "Contents of dist directory:" && \
+    (ls -la dist/ || echo "WARNING: dist directory not found!") && \
+    echo "Looking for index.js:" && \
+    find . -name "index.js" -type f 2>/dev/null || echo "No index.js found" && \
+    (test -f dist/index.js || test -f dist/backend/src/index.js) || (echo "ERROR: dist/index.js or dist/backend/src/index.js not found after build!" && echo "Build log:" && cat /tmp/build.log && echo "Current directory structure:" && find . -type f -name "*.js" 2>/dev/null | head -20 && exit 1) && \
+    echo "Build verification successful!"
 
 # Production stage
 FROM node:20-alpine
@@ -39,4 +62,5 @@ WORKDIR /app/backend
 
 EXPOSE 5000
 
-CMD ["node", "dist/index.js"]
+# TypeScript outputs to dist/backend/src/index.js due to shared directory includes
+CMD ["node", "dist/backend/src/index.js"]

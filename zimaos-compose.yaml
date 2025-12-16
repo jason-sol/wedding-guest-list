@@ -1,0 +1,111 @@
+name: wedding-guest-list
+services:
+  backend:
+    cpu_shares: 50
+    command: []
+    container_name: wedding-guest-backend
+    deploy:
+      resources:
+        limits:
+          memory: "536870912"
+        reservations:
+          devices: []
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - TZ=Australia/Sydney
+      - AUTH_USERNAME=${AUTH_USERNAME:-}
+      - AUTH_PASSWORD=${AUTH_PASSWORD:-}
+      - AUTH_USERNAME_2=${AUTH_USERNAME_2:-}
+      - AUTH_PASSWORD_2=${AUTH_PASSWORD_2:-}
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    labels:
+      icon: https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/assets/People/SVG/ic_fluent_people_24_regular.svg
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /DATA/AppData/wedding-guest-list/data
+        target: /app/data
+        bind:
+          create_host_path: true
+    ports: []
+    devices: []
+    cap_add: []
+    networks:
+      - wedding_guest_list_network
+    privileged: false
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    cpu_shares: 50
+    command: []
+    container_name: wedding-guest-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+        required: true
+    deploy:
+      resources:
+        limits:
+          memory: "134217728"
+        reservations:
+          devices: []
+    environment:
+      - TZ=Australia/Sydney
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    labels:
+      icon: https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/assets/People/SVG/ic_fluent_people_24_regular.svg
+    ports:
+      - mode: ingress
+        target: 80
+        published: "70"
+        protocol: tcp
+    restart: unless-stopped
+    devices: []
+    cap_add: []
+    networks:
+      - wedding_guest_list_network
+    privileged: false
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  wedding_guest_list_network:
+    name: wedding-guest-list_wedding_guest_list_network
+    driver: bridge
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  author: Wedding Guest List
+  category: Custom
+  description:
+    en_us: A web application for managing wedding guest lists with support for individual guests, family groupings, categories, and flexible filtering. Features include adding/editing guests, family management, category tagging with colors, and multi-category filtering.
+  developer: Custom
+  hostname: ""
+  icon: https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/assets/People/SVG/ic_fluent_people_24_regular.svg
+  index: /
+  is_uncontrolled: false
+  main: frontend
+  port_map: "70"
+  scheme: http
+  store_app_id: wedding-guest-list
+  tagline:
+    en_us: Manage your wedding guest list with ease - add guests, organize families, and filter by categories
+  thumbnail: https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/assets/People/SVG/ic_fluent_people_24_regular.svg
+  title:
+    custom: ""
+    en_us: Wedding Guest List

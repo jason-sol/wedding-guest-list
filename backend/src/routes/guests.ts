@@ -30,7 +30,7 @@ router.get('/:id', (req: Request, res: Response) => {
 
 // POST /api/guests - Add a new guest
 router.post('/', (req: Request, res: Response) => {
-  const { firstName, lastName, familyId, tags } = req.body;
+  const { firstName, lastName, familyId, tags, reception } = req.body;
 
   if (!firstName || !lastName) {
     return res.status(400).json({ 
@@ -47,6 +47,7 @@ router.post('/', (req: Request, res: Response) => {
     lastName: capitalizedLastName,
     familyId: familyId || null,
     tags: tags || [],
+    reception: reception === true || reception === 'true',
   });
 
   res.status(201).json(guest);
@@ -54,13 +55,14 @@ router.post('/', (req: Request, res: Response) => {
 
 // PUT /api/guests/:id - Update a guest
 router.put('/:id', (req: Request, res: Response) => {
-  const { firstName, lastName, familyId, tags } = req.body;
+  const { firstName, lastName, familyId, tags, reception } = req.body;
   
   const updates: Partial<Guest> = {};
   if (firstName !== undefined) updates.firstName = capitalizeWords(firstName.trim());
   if (lastName !== undefined) updates.lastName = capitalizeWords(lastName.trim());
   if (familyId !== undefined) updates.familyId = familyId;
   if (tags !== undefined) updates.tags = tags;
+  if (reception !== undefined) updates.reception = reception === true || reception === 'true';
 
   const updated = store.updateGuest(req.params.id, updates);
   

@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const store_1 = require("../store");
+const capitalize_1 = require("../../../shared/utils/capitalize");
 const router = (0, express_1.Router)();
 // GET /api/families - Get all families
 router.get('/', (req, res) => {
@@ -27,10 +28,10 @@ router.post('/', (req, res) => {
     if (Array.isArray(members)) {
         for (const member of members) {
             if (typeof member === 'object' && member.firstName && member.lastName) {
-                // Create guest and add to family
+                // Create guest and add to family (capitalize names)
                 const guest = store_1.store.addGuest({
-                    firstName: member.firstName,
-                    lastName: member.lastName,
+                    firstName: (0, capitalize_1.capitalizeWords)(member.firstName.trim()),
+                    lastName: (0, capitalize_1.capitalizeWords)(member.lastName.trim()),
                     familyId: null, // Will be set after family is created
                     tags: member.tags || [],
                 });
@@ -43,7 +44,7 @@ router.post('/', (req, res) => {
         }
     }
     const family = store_1.store.addFamily({
-        name,
+        name: (0, capitalize_1.capitalizeWords)(name.trim()),
         members: memberIds,
     });
     // Update guests to reference this family
@@ -57,10 +58,32 @@ router.put('/:id', (req, res) => {
     const { name, members } = req.body;
     const updates = {};
     if (name !== undefined)
-        updates.name = name;
+        updates.name = (0, capitalize_1.capitalizeWords)(name.trim());
     if (members !== undefined)
         updates.members = members;
     const updated = store_1.store.updateFamily(req.params.id, updates);
+    if (!updated) {
+        return res.status(404).json({ error: 'Family not found' });
+    }
+    res.json(updated);
+});
+// PUT /api/families/:id/members/reorder - Reorder family members
+router.put('/:id/members/reorder', (req, res) => {
+    const { memberIds } = req.body;
+    if (!Array.isArray(memberIds)) {
+        return res.status(400).json({ error: 'memberIds must be an array' });
+    }
+    const family = store_1.store.getFamily(req.params.id);
+    if (!family) {
+        return res.status(404).json({ error: 'Family not found' });
+    }
+    // Validate all member IDs exist in the family
+    const invalidIds = memberIds.filter(id => !family.members.includes(id));
+    if (invalidIds.length > 0) {
+        return res.status(400).json({ error: `Invalid member IDs: ${invalidIds.join(', ')}` });
+    }
+    // Update family with new member order
+    const updated = store_1.store.updateFamily(req.params.id, { members: memberIds });
     if (!updated) {
         return res.status(404).json({ error: 'Family not found' });
     }

@@ -14,6 +14,7 @@ export default function GuestForm({ onClose, onSuccess, categories }: GuestFormP
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [selectedTags, setSelectedTags] = useState<Category[]>([]);
+  const [reception, setReception] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,6 +32,7 @@ export default function GuestForm({ onClose, onSuccess, categories }: GuestFormP
         lastName: lastName.trim(),
         familyId: null,
         tags: selectedTags,
+        reception: reception,
       });
       onSuccess();
     } catch (error) {
@@ -86,6 +88,17 @@ export default function GuestForm({ onClose, onSuccess, categories }: GuestFormP
               setSelectedTags(selectedTags.filter(t => t !== category));
             }}
           />
+
+          <div className="form-group">
+            <label className="reception-checkbox-pill">
+              <input
+                type="checkbox"
+                checked={reception}
+                onChange={(e) => setReception(e.target.checked)}
+              />
+              <span>Attending Reception</span>
+            </label>
+          </div>
 
           <div className="form-actions">
             <button type="button" onClick={onClose} disabled={isSubmitting}>

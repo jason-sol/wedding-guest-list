@@ -1,13 +1,12 @@
-// Utility function to capitalize first letter of each word
+// Utility function to capitalize only the first letter of the string
+// Preserves other capital letters in the name (e.g., "McDonald" stays "McDonald")
 export function capitalizeWords(str: string): string {
-  return str
-    .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-// Capitalize first letter only
+// Capitalize first letter only (alias for consistency)
 export function capitalizeFirst(str: string): string {
   if (!str) return str;
-  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }

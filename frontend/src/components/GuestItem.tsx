@@ -49,10 +49,15 @@ export default function GuestItem({ guest, categories, onUpdate, removeMode = fa
         <div className="guest-name">
           <span className="first-name">{guest.firstName}</span>
           <span className="last-name">{guest.lastName}</span>
+          {guest.reception && (
+            <span className="reception-indicator" title="Attending Reception">
+              ✓
+            </span>
+          )}
         </div>
         {guest.tags.length > 0 && (
           <div className="guest-tags">
-            {guest.tags.map((tag, index) => {
+            {[...guest.tags].sort().map((tag, index) => {
               const catInfo = categories.find(c => c.name === tag);
               return (
                 <CategoryTag key={index} category={tag} categoryInfo={catInfo} />

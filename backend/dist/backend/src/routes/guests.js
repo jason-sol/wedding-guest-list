@@ -2,34 +2,16 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const store_1 = require("../store");
+const capitalize_1 = require("../../../shared/utils/capitalize");
 const router = (0, express_1.Router)();
-// Helper function to sort guests
-function sortGuests(guests, sortBy) {
-    const sorted = [...guests];
-    switch (sortBy) {
-        case 'firstName':
-            return sorted.sort((a, b) => a.firstName.localeCompare(b.firstName));
-        case 'lastName':
-            return sorted.sort((a, b) => a.lastName.localeCompare(b.lastName));
-        case 'category':
-            return sorted.sort((a, b) => {
-                // Sort by first category tag, then by last name
-                const aFirstTag = a.tags[0] || '';
-                const bFirstTag = b.tags[0] || '';
-                const tagCompare = aFirstTag.localeCompare(bFirstTag);
-                if (tagCompare !== 0)
-                    return tagCompare;
-                return a.lastName.localeCompare(b.lastName);
-            });
-        default:
-            return sorted;
-    }
+// Helper function to sort guests by last name
+function sortGuests(guests) {
+    return [...guests].sort((a, b) => a.lastName.localeCompare(b.lastName));
 }
-// GET /api/guests - Get all guests with optional sorting
+// GET /api/guests - Get all guests sorted by last name
 router.get('/', (req, res) => {
-    const sortBy = req.query.sortBy || 'lastName';
     const guests = store_1.store.getAllGuests();
-    const sortedGuests = sortGuests(guests, sortBy);
+    const sortedGuests = sortGuests(guests);
     res.json(sortedGuests);
 });
 // GET /api/guests/:id - Get a specific guest
@@ -48,9 +30,12 @@ router.post('/', (req, res) => {
             error: 'First name and last name are required'
         });
     }
+    // Capitalize names
+    const capitalizedFirstName = (0, capitalize_1.capitalizeWords)(firstName.trim());
+    const capitalizedLastName = (0, capitalize_1.capitalizeWords)(lastName.trim());
     const guest = store_1.store.addGuest({
-        firstName,
-        lastName,
+        firstName: capitalizedFirstName,
+        lastName: capitalizedLastName,
         familyId: familyId || null,
         tags: tags || [],
     });
@@ -61,9 +46,9 @@ router.put('/:id', (req, res) => {
     const { firstName, lastName, familyId, tags } = req.body;
     const updates = {};
     if (firstName !== undefined)
-        updates.firstName = firstName;
+        updates.firstName = (0, capitalize_1.capitalizeWords)(firstName.trim());
     if (lastName !== undefined)
-        updates.lastName = lastName;
+        updates.lastName = (0, capitalize_1.capitalizeWords)(lastName.trim());
     if (familyId !== undefined)
         updates.familyId = familyId;
     if (tags !== undefined)

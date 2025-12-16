@@ -22,6 +22,7 @@ export interface Guest {
   tags: Category[];
   rsvp?: RSVPStatus;
   events?: EventType[];
+  reception?: boolean; // Indicates if guest is attending reception
 }
 
 // Family data structure
