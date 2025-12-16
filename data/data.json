@@ -9,7 +9,8 @@
         "Church Friends",
         "Church Families",
         "Bridal Party"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-2",
@@ -20,7 +21,8 @@
         "Church Friends",
         "Church Families",
         "Bridal Party"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-3",
@@ -29,7 +31,8 @@
       "familyId": null,
       "tags": [
         "Bridal Party"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-4",
@@ -40,7 +43,8 @@
         "Church Families",
         "Bridal Party",
         "Church Friends"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-5",
@@ -51,7 +55,8 @@
         "Church Families",
         "Bridal Party",
         "Church Friends"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-6",
@@ -61,7 +66,8 @@
       "tags": [
         "Bridal Party",
         "Church Friends"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-7",
@@ -72,7 +78,8 @@
         "Church Friends",
         "Church Families",
         "Bridal Party"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-8",
@@ -81,7 +88,8 @@
       "familyId": "family-2",
       "tags": [
         "Groom Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-9",
@@ -90,7 +98,8 @@
       "familyId": "family-2",
       "tags": [
         "Groom Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-10",
@@ -99,7 +108,8 @@
       "familyId": "family-2",
       "tags": [
         "Groom Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-11",
@@ -108,7 +118,8 @@
       "familyId": "family-2",
       "tags": [
         "Groom Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-12",
@@ -116,9 +127,10 @@
       "lastName": "Vainikolo",
       "familyId": "family-2",
       "tags": [
-        "Bridal Party",
-        "Groom Family"
-      ]
+        "Groom Family",
+        "Bridal Party"
+      ],
+      "reception": true
     },
     {
       "id": "guest-13",
@@ -127,7 +139,8 @@
       "familyId": "family-2",
       "tags": [
         "Groom Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-14",
@@ -135,9 +148,10 @@
       "lastName": "Hu",
       "familyId": "family-3",
       "tags": [
-        "Bridal Party",
-        "Bride Family"
-      ]
+        "Bride Family",
+        "Bridal Party"
+      ],
+      "reception": true
     },
     {
       "id": "guest-15",
@@ -146,7 +160,8 @@
       "familyId": "family-3",
       "tags": [
         "Bride Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-16",
@@ -155,7 +170,8 @@
       "familyId": "family-3",
       "tags": [
         "Bride Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-17",
@@ -165,7 +181,8 @@
       "tags": [
         "Bride Family",
         "Church Friends"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-18",
@@ -175,7 +192,8 @@
       "tags": [
         "Bride Family",
         "Church Friends"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-19",
@@ -183,9 +201,10 @@
       "lastName": "Solanki",
       "familyId": "family-4",
       "tags": [
-        "Bridal Party",
-        "Groom Family"
-      ]
+        "Groom Family",
+        "Bridal Party"
+      ],
+      "reception": true
     },
     {
       "id": "guest-20",
@@ -194,7 +213,8 @@
       "familyId": "family-4",
       "tags": [
         "Groom Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-21",
@@ -203,7 +223,8 @@
       "familyId": "family-4",
       "tags": [
         "Groom Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-22",
@@ -212,7 +233,8 @@
       "familyId": "family-4",
       "tags": [
         "Groom Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-23",
@@ -221,7 +243,8 @@
       "familyId": "family-4",
       "tags": [
         "Groom Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-24",
@@ -230,7 +253,8 @@
       "familyId": "family-4",
       "tags": [
         "Groom Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-25",
@@ -239,7 +263,8 @@
       "familyId": "family-4",
       "tags": [
         "Groom Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-26",
@@ -248,7 +273,8 @@
       "familyId": "family-4",
       "tags": [
         "Groom Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-27",
@@ -256,9 +282,10 @@
       "lastName": "Solanki",
       "familyId": "family-4",
       "tags": [
-        "Bridal Party",
-        "Groom Family"
-      ]
+        "Groom Family",
+        "Bridal Party"
+      ],
+      "reception": true
     },
     {
       "id": "guest-28",
@@ -267,7 +294,8 @@
       "familyId": "family-4",
       "tags": [
         "Groom Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-29",
@@ -277,7 +305,8 @@
       "tags": [
         "Church Friends",
         "Church Families"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-30",
@@ -286,7 +315,8 @@
       "familyId": "family-3",
       "tags": [
         "Bride Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-31",
@@ -295,7 +325,8 @@
       "familyId": "family-3",
       "tags": [
         "Bride Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-32",
@@ -304,7 +335,8 @@
       "familyId": "family-3",
       "tags": [
         "Bride Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-33",
@@ -313,7 +345,8 @@
       "familyId": "family-3",
       "tags": [
         "Bride Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-34",
@@ -322,7 +355,8 @@
       "familyId": "family-3",
       "tags": [
         "Bride Family"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-35",
@@ -359,7 +393,8 @@
       "tags": [
         "Church Friends",
         "Church Families"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-39",
@@ -477,7 +512,8 @@
       "tags": [
         "Church Friends",
         "Church Families"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-52",
@@ -487,7 +523,8 @@
       "tags": [
         "Church Friends",
         "Church Families"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-53",
@@ -497,7 +534,8 @@
       "tags": [
         "Church Families",
         "Church Friends"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-54",
@@ -507,7 +545,8 @@
       "tags": [
         "Church Families",
         "Church Friends"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-55",
@@ -1030,7 +1069,8 @@
       "familyId": "family-19",
       "tags": [
         "Church Families"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-112",
@@ -1039,7 +1079,8 @@
       "familyId": "family-19",
       "tags": [
         "Church Families"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-113",
@@ -1049,7 +1090,8 @@
       "tags": [
         "Church Families",
         "Church Friends"
-      ]
+      ],
+      "reception": true
     },
     {
       "id": "guest-114",
@@ -1853,6 +1895,17 @@
       "tags": [
         "Sophie Other"
       ]
+    },
+    {
+      "firstName": "Sophia",
+      "lastName": "Chan",
+      "familyId": null,
+      "tags": [
+        "Bridal Party",
+        "Church Friends"
+      ],
+      "reception": true,
+      "id": "guest-201"
     }
   ],
   "families": [
@@ -2237,20 +2290,28 @@
       "color": "#34495E"
     },
     {
-      "name": "Groom Family",
-      "color": "#D68910"
+      "name": "Church Families",
+      "color": "#E91E63"
     },
     {
       "name": "Church Friends",
       "color": "#E67E22"
     },
     {
-      "name": "Church Families",
-      "color": "#E91E63"
+      "name": "Groom Family",
+      "color": "#D68910"
     },
     {
-      "name": "Sophie UTS",
-      "color": "#1ABC9C"
+      "name": "Jason High School",
+      "color": "#3498DB"
+    },
+    {
+      "name": "Jason Other",
+      "color": "#E74C3C"
+    },
+    {
+      "name": "Jason UNSW",
+      "color": "#2ECC71"
     },
     {
       "name": "Sophie High School",
@@ -2261,16 +2322,8 @@
       "color": "#9B59B6"
     },
     {
-      "name": "Jason High School",
-      "color": "#3498DB"
-    },
-    {
-      "name": "Jason UNSW",
-      "color": "#2ECC71"
-    },
-    {
-      "name": "Jason Other",
-      "color": "#E74C3C"
+      "name": "Sophie UTS",
+      "color": "#1ABC9C"
     }
   ]
 }
