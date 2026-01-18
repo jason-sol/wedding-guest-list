@@ -44,6 +44,11 @@ const corsOptions = config.isDevelopment
                 callback(null, true);
                 return;
             }
+            // Allow all origins if wildcard is configured (useful for home/local deployments)
+            if (config.cors.allowedOrigins.includes('*')) {
+                callback(null, true);
+                return;
+            }
             if (config.cors.allowedOrigins.includes(origin)) {
                 callback(null, true);
             }
