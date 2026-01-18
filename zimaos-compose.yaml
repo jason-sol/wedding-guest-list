@@ -1,13 +1,13 @@
 name: wedding-guest-list
 services:
   backend:
-    cpu_shares: 50
+    cpu_shares: 90
     command: []
     container_name: wedding-guest-backend
     deploy:
       resources:
         limits:
-          memory: "536870912"
+          memory: 536870912
         reservations:
           devices: []
     environment:
@@ -22,7 +22,7 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     labels:
-      icon: https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/assets/People/SVG/ic_fluent_people_24_regular.svg
+      icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/wedding.png
     restart: unless-stopped
     volumes:
       - type: bind
@@ -42,9 +42,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-
   frontend:
-    cpu_shares: 50
+    cpu_shares: 90
     command: []
     container_name: wedding-guest-frontend
     depends_on:
@@ -54,7 +53,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: "134217728"
+          memory: 134217728
         reservations:
           devices: []
     environment:
@@ -63,13 +62,14 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
     labels:
-      icon: https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/assets/People/SVG/ic_fluent_people_24_regular.svg
+      icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/wedding.png
     ports:
       - mode: ingress
         target: 80
         published: "70"
         protocol: tcp
     restart: unless-stopped
+    volumes: []
     devices: []
     cap_add: []
     networks:
@@ -81,23 +81,21 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-
 networks:
   wedding_guest_list_network:
     name: wedding-guest-list_wedding_guest_list_network
     driver: bridge
-
 x-casaos:
   architectures:
     - amd64
     - arm64
   author: Wedding Guest List
-  category: Custom
+  category: Utilities
   description:
-    en_us: A web application for managing wedding guest lists with support for individual guests, family groupings, categories, and flexible filtering. Features include adding/editing guests, family management, category tagging with colors, and multi-category filtering.
-  developer: Custom
+    en_us: A web application for managing wedding guest lists with support for multiple events, individual guests, family groupings, categories, and flexible filtering. Features include multi-event management, family groupings with drag-drop reordering, color-coded category tags, user management with permissions, dark/light mode, and data import/export.
+  developer: ""
   hostname: ""
-  icon: https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/assets/People/SVG/ic_fluent_people_24_regular.svg
+  icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/wedding.png
   index: /
   is_uncontrolled: false
   main: frontend
@@ -105,8 +103,8 @@ x-casaos:
   scheme: http
   store_app_id: wedding-guest-list
   tagline:
-    en_us: Manage your wedding guest list with ease - add guests, organize families, and filter by categories
-  thumbnail: https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/assets/People/SVG/ic_fluent_people_24_regular.svg
+    en_us: Manage your wedding guest list with ease
+  thumbnail: ""
   title:
     custom: ""
     en_us: Wedding Guest List
