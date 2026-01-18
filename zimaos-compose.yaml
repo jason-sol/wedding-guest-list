@@ -7,7 +7,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 536870912
+          memory: "536870912"
         reservations:
           devices: []
     environment:
@@ -53,7 +53,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 134217728
+          memory: "134217728"
         reservations:
           devices: []
     environment:
