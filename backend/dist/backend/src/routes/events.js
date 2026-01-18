@@ -165,4 +165,29 @@ router.put('/:eventId/permissions/:userId', permissions_1.requireOwner, (req, re
         permission: validation.data.permission,
     });
 });
+// POST /api/events/:eventId/reconstruct-families - Reconstruct families from a source event (owner only)
+router.post('/:eventId/reconstruct-families', permissions_1.requireOwner, (req, res) => {
+    const targetEvent = store_1.store.getEvent(req.params.eventId);
+    if (!targetEvent) {
+        return (0, apiResponse_1.sendNotFound)(res, 'Target event');
+    }
+    const validation = (0, validation_1.validate)(validation_1.ReconstructFamiliesSchema, req.body);
+    if (!validation.success) {
+        return (0, apiResponse_1.sendValidationError)(res, validation.error, validation.details);
+    }
+    const { sourceEventId } = validation.data;
+    const sourceEvent = store_1.store.getEvent(sourceEventId);
+    if (!sourceEvent) {
+        return (0, apiResponse_1.sendError)(res, 'Source event not found', 400);
+    }
+    if (sourceEventId === req.params.eventId) {
+        return (0, apiResponse_1.sendError)(res, 'Source and target events must be different', 400);
+    }
+    const result = store_1.store.reconstructFamiliesFromSource(sourceEventId, req.params.eventId);
+    (0, apiResponse_1.sendSuccess)(res, {
+        message: `Reconstructed families from "${sourceEvent.name}" to "${targetEvent.name}"`,
+        familiesCreated: result.familiesCreated,
+        guestsUpdated: result.guestsUpdated,
+    });
+});
 exports.default = router;

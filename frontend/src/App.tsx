@@ -1,10 +1,59 @@
+/**
+ * Main App component using MUI
+ * Includes AppBar, event tabs, guest management, and dark mode toggle
+ */
+
 import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Box,
+  Container,
+  AppBar,
+  Toolbar,
+  Typography,
+  Button,
+  IconButton,
+  Tabs,
+  Tab,
+  TextField,
+  InputAdornment,
+  Paper,
+  Stack,
+  CircularProgress,
+  Alert,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Tooltip,
+  Menu,
+  MenuItem,
+  Divider,
+} from '@mui/material';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import LogoutIcon from '@mui/icons-material/Logout';
+import AddIcon from '@mui/icons-material/Add';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import GroupAddIcon from '@mui/icons-material/GroupAdd';
+import CategoryIcon from '@mui/icons-material/Category';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
+import LightModeIcon from '@mui/icons-material/LightMode';
+import SettingsIcon from '@mui/icons-material/Settings';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import FileUploadIcon from '@mui/icons-material/FileUpload';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import BlockIcon from '@mui/icons-material/Block';
+import CheckIcon from '@mui/icons-material/Check';
 import { Guest, Family, CategoryInfo } from './types';
 import { fetchGuests, fetchFamilies, fetchCategories, fetchGuestPresence, exportData, importData, createEvent, GuestPresenceMap } from './api';
 import { useFilteredGuests } from './hooks/useFilteredGuests';
 import { useToast } from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
 import { useEvents } from './contexts/EventContext';
+import { useThemeMode } from './theme/ThemeContext';
 import GuestList from './components/GuestList';
 import GuestForm from './components/GuestForm';
 import FamilyForm from './components/FamilyForm';
@@ -12,13 +61,13 @@ import AddCategoryModal from './components/AddCategoryModal';
 import UserManagement from './components/UserManagement';
 import EventSettings from './components/EventSettings';
 import Login from './components/Login';
-import CategoryTag from './components/CategoryTag';
 import ScrollToTop from './components/ScrollToTop';
-import './App.css';
+import { shouldUseWhiteText, getContrastAdjustedColor } from './components/CategoryTag';
 
 function App() {
   const { isAuthenticated, user, logout, login } = useAuth();
   const { events, currentEvent, setCurrentEvent, refreshEvents, canEdit, isBlocked, loading: eventsLoading } = useEvents();
+  const { mode, toggleTheme } = useThemeMode();
 
   const [guests, setGuests] = useState<Guest[]>([]);
   const [families, setFamilies] = useState<Family[]>([]);
@@ -38,12 +87,13 @@ function App() {
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [showUserManagement, setShowUserManagement] = useState(false);
   const [editingEvent, setEditingEvent] = useState<string | null>(null);
+  const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
   const scrollPositionRef = useRef<number | null>(null);
   const shouldRestoreScrollRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { showSuccess, showError } = useToast();
 
-  // Restore scroll position after data updates
   useEffect(() => {
     if (shouldRestoreScrollRef.current && scrollPositionRef.current !== null && !loading) {
       const timeoutId = setTimeout(() => {
@@ -96,14 +146,12 @@ function App() {
     }
   }, [currentEvent]);
 
-  // Load event data when current event changes
   useEffect(() => {
     if (isAuthenticated && currentEvent) {
       loadData();
     }
   }, [isAuthenticated, currentEvent, loadData]);
 
-  // Load categories when authenticated (global, not event-scoped)
   useEffect(() => {
     if (isAuthenticated) {
       fetchCategories().then(setCategories).catch(console.error);
@@ -136,6 +184,7 @@ function App() {
 
   const handleExport = async () => {
     setIsExporting(true);
+    setMoreMenuAnchor(null);
     try {
       const blob = await exportData();
       const url = window.URL.createObjectURL(blob);
@@ -209,174 +258,266 @@ function App() {
     }
   };
 
-  // Use shared filtering hook
   const filteredGuests = useFilteredGuests({
     guests,
     selectedCategories,
     searchTerm,
   });
 
-  // Show login page if not authenticated
   if (isAuthenticated === false) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
   if (isAuthenticated === null || eventsLoading) {
     return (
-      <div className="app">
-        <header className="app-header">
-          <h1>Wedding Guest List</h1>
-        </header>
-        <div className="loading-state">
-          <p>Loading...</p>
-        </div>
-      </div>
+      <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+        <AppBar position="static" elevation={0}>
+          <Toolbar>
+            <FavoriteIcon sx={{ mr: 1.5 }} />
+            <Typography variant="h6" fontWeight={600}>Wedding Guest List</Typography>
+          </Toolbar>
+        </AppBar>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+          <CircularProgress />
+        </Box>
+      </Box>
     );
   }
 
   if (error) {
     return (
-      <div className="app">
-        <header className="app-header">
-          <h1>Wedding Guest List</h1>
-        </header>
-        <div className="error-state">
-          <p className="error-message">{error}</p>
-          <button onClick={() => loadData(false)} className="retry-button">
-            Retry
-          </button>
-        </div>
-      </div>
+      <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+        <AppBar position="static" elevation={0}>
+          <Toolbar>
+            <FavoriteIcon sx={{ mr: 1.5 }} />
+            <Typography variant="h6" fontWeight={600}>Wedding Guest List</Typography>
+          </Toolbar>
+        </AppBar>
+        <Container maxWidth="md" sx={{ py: 4 }}>
+          <Alert
+            severity="error"
+            action={<Button onClick={() => loadData(false)}>Retry</Button>}
+          >
+            {error}
+          </Alert>
+        </Container>
+      </Box>
     );
   }
 
-  // Blocked event view
   if (isBlocked && currentEvent) {
     return (
-      <div className="app">
-        <header className="app-header">
-          <h1>Wedding Guest List</h1>
-          <div className="header-right">
-            {user && <span className="username-display">{user.username}</span>}
-            <button onClick={handleLogout} className="logout-button">
-              Logout
-            </button>
-          </div>
-        </header>
-
-        <div className="tabs-container">
-          {events.map((event) => (
-            <button
-              key={event.id}
-              className={`tab-button ${currentEvent?.id === event.id ? 'active' : ''}`}
-              onClick={() => setCurrentEvent(event.id)}
-            >
-              {event.name}
-            </button>
-          ))}
-        </div>
-
-        <div className="blocked-state">
-          <h2>Access Denied</h2>
-          <p>You do not have permission to view this event.</p>
-          <p>Please contact the owner to request access to "{currentEvent.name}".</p>
-        </div>
-      </div>
+      <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+        <AppBar position="static" elevation={0}>
+          <Toolbar>
+            <FavoriteIcon sx={{ mr: 1.5 }} />
+            <Typography variant="h6" fontWeight={600} sx={{ flexGrow: 1 }}>Wedding Guest List</Typography>
+            <Tooltip title={`Logged in as ${user?.username}`}>
+              <Chip label={user?.username} size="small" sx={{ mr: 2, bgcolor: 'rgba(255,255,255,0.15)' }} />
+            </Tooltip>
+            <IconButton color="inherit" onClick={toggleTheme}>
+              {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
+            </IconButton>
+            <IconButton color="inherit" onClick={handleLogout}>
+              <LogoutIcon />
+            </IconButton>
+          </Toolbar>
+        </AppBar>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+          <Container maxWidth="lg">
+            <Tabs value={currentEvent.id} onChange={(_, v) => setCurrentEvent(v)}>
+              {events.map((event) => (
+                <Tab key={event.id} label={event.name} value={event.id} />
+              ))}
+            </Tabs>
+          </Container>
+        </Box>
+        <Container maxWidth="md" sx={{ py: 8, textAlign: 'center' }}>
+          <BlockIcon sx={{ fontSize: 64, color: 'error.main', mb: 2 }} />
+          <Typography variant="h5" fontWeight={600} gutterBottom>Access Denied</Typography>
+          <Typography color="text.secondary">
+            You do not have permission to view this event.
+            <br />
+            Please contact the owner to request access to "{currentEvent.name}".
+          </Typography>
+        </Container>
+      </Box>
     );
   }
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>Wedding Guest List</h1>
-        <div className="header-right">
-          {user && <span className="username-display">{user.username}{user.isOwner && ' (Owner)'}</span>}
-          <button onClick={handleLogout} className="logout-button">
-            Logout
-          </button>
-        </div>
-      </header>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+      {/* App Bar */}
+      <AppBar position="static" elevation={0}>
+        <Toolbar>
+          <FavoriteIcon sx={{ mr: 1.5 }} />
+          <Typography variant="h6" fontWeight={600} sx={{ flexGrow: 1 }}>
+            Wedding Guest List
+          </Typography>
+          {user && (
+            <Tooltip title={`Logged in as ${user.username}${user.isOwner ? ' (Owner)' : ''}`}>
+              <Chip
+                label={user.username}
+                size="small"
+                sx={{ mr: 2, bgcolor: 'rgba(255,255,255,0.15)', color: 'inherit' }}
+              />
+            </Tooltip>
+          )}
+          <IconButton color="inherit" onClick={toggleTheme}>
+            {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
+          </IconButton>
+          <IconButton color="inherit" onClick={handleLogout}>
+            <LogoutIcon />
+          </IconButton>
+        </Toolbar>
+      </AppBar>
 
-      <div className="tabs-container">
-        {events.map((event) => (
-          <button
-            key={event.id}
-            className={`tab-button ${currentEvent?.id === event.id ? 'active' : ''} ${event.permission === 'none' ? 'blocked' : ''}`}
-            onClick={() => setCurrentEvent(event.id)}
-            title={event.permission === 'none' ? 'No access' : event.permission}
-          >
-            {event.name}
-            {event.permission === 'none' && <span className="blocked-indicator">!</span>}
-            {user?.isOwner && currentEvent?.id === event.id && (
-              <span
-                className="event-settings-icon"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditingEvent(event.id);
-                }}
-                title="Event settings"
-              >
-                ⚙
-              </span>
-            )}
-          </button>
-        ))}
-        {user?.isOwner && (
-          <button
-            className="tab-button add-event-button"
-            onClick={() => setShowAddEventForm(true)}
-            title="Add new event"
-          >
-            +
-          </button>
-        )}
-      </div>
-
-      {showAddEventForm && (
-        <div className="modal-overlay" onClick={() => setShowAddEventForm(false)}>
-          <div className="modal-content small-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Add New Event</h2>
-            <form onSubmit={handleCreateEvent}>
-              <div className="form-group">
-                <label htmlFor="event-name">Event Name</label>
-                <input
-                  id="event-name"
-                  type="text"
-                  value={newEventName}
-                  onChange={(e) => setNewEventName(e.target.value)}
-                  placeholder="e.g., Ceremony, Reception"
-                  required
-                  autoFocus
+      {/* Event Tabs */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+        <Container maxWidth="lg">
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Tabs
+              value={currentEvent?.id || false}
+              onChange={(_, v) => setCurrentEvent(v)}
+              variant="scrollable"
+              scrollButtons="auto"
+              sx={{ flexGrow: 1 }}
+            >
+              {events.map((event) => (
+                <Tab
+                  key={event.id}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      {event.name}
+                      {event.permission === 'none' && (
+                        <BlockIcon fontSize="small" sx={{ color: 'error.main' }} />
+                      )}
+                      {user?.isOwner && currentEvent?.id === event.id && (
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingEvent(event.id);
+                          }}
+                          sx={{ ml: 0.5, p: 0.25 }}
+                        >
+                          <SettingsIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </Box>
+                  }
+                  value={event.id}
                 />
-              </div>
-              <div className="form-actions">
-                <button type="button" onClick={() => setShowAddEventForm(false)}>
-                  Cancel
-                </button>
-                <button type="submit" disabled={isCreatingEvent || !newEventName.trim()}>
-                  {isCreatingEvent ? 'Creating...' : 'Create Event'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+              ))}
+            </Tabs>
+            {user?.isOwner && (
+              <IconButton
+                color="primary"
+                onClick={() => setShowAddEventForm(true)}
+                sx={{ ml: 1 }}
+              >
+                <AddIcon />
+              </IconButton>
+            )}
+          </Box>
+        </Container>
+      </Box>
 
-      <div className="app-controls">
-        <div className="app-controls-row">
-          <div className="category-filter">
-            <label>Filter by Category:</label>
-            <div className="category-filter-pills">
+      {/* Main Content */}
+      <Container maxWidth="lg" sx={{ py: 3 }}>
+        {/* Controls */}
+        <Paper sx={{ p: 2, mb: 3 }}>
+          {/* Top row - Actions */}
+          <Stack direction="row" spacing={2} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
+            {canEdit && (
+              <>
+                <Button
+                  variant="contained"
+                  startIcon={<PersonAddIcon />}
+                  onClick={() => setShowGuestForm(true)}
+                >
+                  Add Guest
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<GroupAddIcon />}
+                  onClick={() => setShowFamilyForm(true)}
+                >
+                  Add Family
+                </Button>
+              </>
+            )}
+            <Button
+              variant="outlined"
+              startIcon={<CategoryIcon />}
+              onClick={() => setShowCategoryForm(true)}
+            >
+              {canEdit ? 'Categories' : 'View Categories'}
+            </Button>
+            {user?.isOwner && (
+              <>
+                <Button
+                  variant="outlined"
+                  startIcon={<AdminPanelSettingsIcon />}
+                  onClick={() => setShowUserManagement(true)}
+                >
+                  Manage Users
+                </Button>
+                <IconButton onClick={(e) => setMoreMenuAnchor(e.currentTarget)}>
+                  <MoreVertIcon />
+                </IconButton>
+                <Menu
+                  anchorEl={moreMenuAnchor}
+                  open={Boolean(moreMenuAnchor)}
+                  onClose={() => setMoreMenuAnchor(null)}
+                >
+                  <MenuItem onClick={handleExport} disabled={isExporting}>
+                    <FileDownloadIcon sx={{ mr: 1 }} />
+                    {isExporting ? 'Exporting...' : 'Export Data'}
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      setMoreMenuAnchor(null);
+                      fileInputRef.current?.click();
+                    }}
+                    disabled={isImporting}
+                  >
+                    <FileUploadIcon sx={{ mr: 1 }} />
+                    {isImporting ? 'Importing...' : 'Import Data'}
+                  </MenuItem>
+                </Menu>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".json"
+                  onChange={handleImport}
+                  style={{ display: 'none' }}
+                />
+              </>
+            )}
+          </Stack>
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Category filter */}
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1 }}>
+              Filter by Category
+            </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
               {categories.length === 0 ? (
-                <span className="no-categories">No categories available</span>
+                <Typography variant="body2" color="text.secondary">No categories available</Typography>
               ) : (
                 categories.map((cat) => {
                   const isSelected = selectedCategories.includes(cat.name);
+                  const textColor = shouldUseWhiteText(cat.color) ? '#FFFFFF' : '#1E293B';
+                  // Adjust color for better contrast when outlined (unselected)
+                  const outlinedColor = getContrastAdjustedColor(cat.color, mode);
                   return (
-                    <button
+                    <Chip
                       key={cat.name}
-                      type="button"
-                      className={`category-filter-pill ${isSelected ? 'selected' : ''}`}
+                      label={cat.name}
+                      icon={isSelected ? <CheckIcon sx={{ fontSize: '1rem', color: `${textColor} !important` }} /> : undefined}
                       onClick={() => {
                         if (isSelected) {
                           setSelectedCategories(selectedCategories.filter(c => c !== cat.name));
@@ -384,104 +525,124 @@ function App() {
                           setSelectedCategories([...selectedCategories, cat.name]);
                         }
                       }}
-                    >
-                      <CategoryTag
-                        category={cat.name}
-                        categoryInfo={isSelected ? { name: cat.name, color: '#4CAF50' } : cat}
-                      />
-                    </button>
+                      variant={isSelected ? 'filled' : 'outlined'}
+                      sx={{
+                        bgcolor: isSelected ? cat.color : 'transparent',
+                        color: isSelected ? textColor : outlinedColor,
+                        borderColor: isSelected ? cat.color : outlinedColor,
+                        borderWidth: 2,
+                        fontWeight: 600,
+                        '&:hover': {
+                          bgcolor: isSelected ? cat.color : `${outlinedColor}20`,
+                          filter: isSelected ? 'brightness(0.9)' : 'none',
+                          borderColor: isSelected ? cat.color : outlinedColor,
+                        },
+                      }}
+                    />
                   );
                 })
               )}
               {selectedCategories.length > 0 && (
-                <button
-                  type="button"
-                  className="clear-filter-button"
-                  onClick={() => setSelectedCategories([])}
-                >
+                <Button size="small" onClick={() => setSelectedCategories([])}>
                   Clear All
-                </button>
+                </Button>
               )}
-            </div>
-          </div>
+            </Stack>
+          </Box>
 
-          <div className="action-buttons-left">
-            {canEdit && (
-              <>
-                <button onClick={() => setShowGuestForm(true)}>
-                  Add Guest
-                </button>
-                <button onClick={() => setShowFamilyForm(true)}>
-                  Add Family
-                </button>
-              </>
-            )}
-            <button
-              className="category-button"
-              onClick={() => setShowCategoryForm(true)}
-            >
-              {canEdit ? 'Add/Remove Category' : 'View Categories'}
-            </button>
-          </div>
-          {user?.isOwner && (
-            <div className="action-buttons-right">
-              <button
-                className="manage-users-button"
-                onClick={() => setShowUserManagement(true)}
-              >
-                Manage Users
-              </button>
-              <button
-                className="export-button"
-                onClick={handleExport}
-                disabled={isExporting}
-              >
-                {isExporting ? 'Exporting...' : 'Export Data'}
-              </button>
-              <label className={`import-button-label ${isImporting ? 'disabled' : ''}`}>
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleImport}
-                  style={{ display: 'none' }}
-                  disabled={isImporting}
-                />
-                <span className="import-button">
-                  {isImporting ? 'Importing...' : 'Import Data'}
-                </span>
-              </label>
-            </div>
-          )}
-        </div>
-
-        <div className="search-and-stats">
-          <div className="search-bar">
-            <label htmlFor="search-input">Search:</label>
-            <input
-              id="search-input"
-              type="text"
+          {/* Search and stats */}
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+            <TextField
+              size="small"
               placeholder="Search guests and families..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="search-input"
+              sx={{ minWidth: 300, flex: 1, maxWidth: 400 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon color="action" />
+                  </InputAdornment>
+                ),
+                endAdornment: searchTerm && (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={() => setSearchTerm('')}>
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
-            {searchTerm && (
-              <button
-                type="button"
-                className="clear-search-button"
-                onClick={() => setSearchTerm('')}
-                aria-label="Clear search"
-              >
-                x
-              </button>
-            )}
-          </div>
-          <div className="total-guests-top">
-            <p>Total Guests: <strong>{filteredGuests.length}</strong></p>
-          </div>
-        </div>
-      </div>
+            <Chip
+              label={`Total: ${filteredGuests.length} guests`}
+              variant="outlined"
+              color="primary"
+            />
+          </Box>
+        </Paper>
 
+        {/* Guest List */}
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+            <CircularProgress />
+          </Box>
+        ) : currentEvent ? (
+          <GuestList
+            guests={guests}
+            families={families}
+            categories={categories}
+            selectedCategories={selectedCategories}
+            searchTerm={searchTerm}
+            onUpdate={() => loadData(true)}
+            eventId={currentEvent.id}
+            readOnly={!canEdit}
+            events={events}
+            guestPresence={guestPresence}
+          />
+        ) : (
+          <Alert severity="info">
+            No events available.{user?.isOwner && ' Click + to create one.'}
+          </Alert>
+        )}
+      </Container>
+
+      {/* Add Event Dialog */}
+      <Dialog
+        open={showAddEventForm}
+        onClose={() => setShowAddEventForm(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3 } }}
+      >
+        <DialogTitle>
+          <Typography variant="h6" fontWeight={600}>Add New Event</Typography>
+        </DialogTitle>
+        <Box component="form" onSubmit={handleCreateEvent}>
+          <DialogContent>
+            <TextField
+              fullWidth
+              label="Event Name"
+              value={newEventName}
+              onChange={(e) => setNewEventName(e.target.value)}
+              placeholder="e.g., Ceremony, Reception"
+              required
+              autoFocus
+            />
+          </DialogContent>
+          <DialogActions sx={{ px: 3, py: 2 }}>
+            <Button onClick={() => setShowAddEventForm(false)}>Cancel</Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={isCreatingEvent || !newEventName.trim()}
+            >
+              {isCreatingEvent ? <CircularProgress size={20} /> : 'Create Event'}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
+      {/* Modals */}
       {showGuestForm && currentEvent && (
         <GuestForm
           onClose={() => setShowGuestForm(false)}
@@ -510,6 +671,8 @@ function App() {
           onClose={() => setShowCategoryForm(false)}
           onSuccess={() => {
             fetchCategories().then(setCategories);
+            // Also reload guests since renaming a category updates guest tags
+            loadData(true);
           }}
           readOnly={!canEdit}
         />
@@ -536,31 +699,8 @@ function App() {
         />
       )}
 
-      {loading ? (
-        <div className="loading-state">
-          <p>Loading guests...</p>
-        </div>
-      ) : currentEvent ? (
-        <GuestList
-          guests={guests}
-          families={families}
-          categories={categories}
-          selectedCategories={selectedCategories}
-          searchTerm={searchTerm}
-          onUpdate={() => loadData(true)}
-          eventId={currentEvent.id}
-          readOnly={!canEdit}
-          events={events}
-          guestPresence={guestPresence}
-        />
-      ) : (
-        <div className="empty-state">
-          <p>No events available. {user?.isOwner && 'Click + to create one.'}</p>
-        </div>
-      )}
-
       <ScrollToTop />
-    </div>
+    </Box>
   );
 }
 

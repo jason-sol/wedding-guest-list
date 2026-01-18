@@ -953,6 +953,43 @@ class DataStore {
     return deleted;
   }
 
+  renameCategory(oldName: string, newName: string): CategoryInfo | null {
+    const category = this.categories.get(oldName.toLowerCase());
+    if (!category) {
+      return null;
+    }
+
+    // Use the actual stored category name for comparisons
+    const actualOldName = category.name;
+
+    // Check if new name already exists (case insensitive)
+    if (actualOldName.toLowerCase() !== newName.toLowerCase() &&
+        this.categories.has(newName.toLowerCase())) {
+      return null;
+    }
+
+    // Update the category
+    this.categories.delete(actualOldName.toLowerCase());
+    const updatedCategory: CategoryInfo = {
+      ...category,
+      name: newName,
+    };
+    this.categories.set(newName.toLowerCase(), updatedCategory);
+
+    // Update all guests that have this tag
+    this.guests.forEach((guest, guestId) => {
+      if (guest.tags.includes(actualOldName)) {
+        const updatedTags = guest.tags.map(tag =>
+          tag === actualOldName ? newName : tag
+        );
+        this.guests.set(guestId, { ...guest, tags: updatedTags });
+      }
+    });
+
+    this.scheduleSave();
+    return updatedCategory;
+  }
+
   // ============================================================
   // Utility operations
   // ============================================================

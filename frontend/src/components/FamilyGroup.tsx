@@ -1,9 +1,27 @@
-import { useState } from 'react';
+/**
+ * Family Group component using MUI Accordion
+ * Displays a collapsible family group with member list
+ */
+
+import { useState, useRef, useEffect } from 'react';
+import {
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Typography,
+  Button,
+  Checkbox,
+  Box,
+  Stack,
+  Chip,
+} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import EditIcon from '@mui/icons-material/Edit';
+import GroupIcon from '@mui/icons-material/Group';
 import { Family, Guest, CategoryInfo, Event, PermissionLevel } from '../types';
 import { GuestPresenceMap } from '../api';
 import GuestItem from './GuestItem';
 import EditFamilyForm from './EditFamilyForm';
-import './FamilyGroup.css';
 
 interface EventWithPermission extends Event {
   permission: PermissionLevel;
@@ -11,8 +29,8 @@ interface EventWithPermission extends Event {
 
 interface FamilyGroupProps {
   family: Family;
-  guests: Guest[]; // Filtered guests (for display)
-  allGuests?: Guest[]; // All guests (for editing)
+  guests: Guest[];
+  allGuests?: Guest[];
   categories: CategoryInfo[];
   onUpdate: () => void;
   eventId: string;
@@ -42,19 +60,24 @@ export default function FamilyGroup({
 }: FamilyGroupProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
+  const checkboxRef = useRef<HTMLInputElement>(null);
 
-  // Get family members from filtered guests (only show matching members)
   const familyMembers = family.members
     .map(id => guests.find(g => g.id === id && g.familyId === family.id))
     .filter((g): g is Guest => g !== undefined);
 
-  // For editing, use allGuests if provided, otherwise use filtered guests
   const guestsForEditing = allGuests || guests;
 
-  // Check if all family members are selected
   const allMembersSelected = familyMembers.length > 0 &&
     familyMembers.every(m => selectedGuestIds.has(m.id));
   const someMembersSelected = familyMembers.some(m => selectedGuestIds.has(m.id));
+
+  // Set indeterminate state via ref
+  useEffect(() => {
+    if (checkboxRef.current) {
+      checkboxRef.current.indeterminate = someMembersSelected && !allMembersSelected;
+    }
+  }, [someMembersSelected, allMembersSelected]);
 
   const handleFamilyCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation();
@@ -64,69 +87,89 @@ export default function FamilyGroup({
 
   return (
     <>
-      <div className={`family-group ${someMembersSelected ? 'has-selection' : ''}`}>
-        <div
-          className="family-header"
-          onClick={() => !selectionMode && setIsExpanded(!isExpanded)}
-          style={{ cursor: selectionMode ? 'default' : 'pointer' }}
+      <Accordion
+        expanded={isExpanded}
+        onChange={(_, expanded) => !selectionMode && setIsExpanded(expanded)}
+        disableGutters
+        sx={{
+          border: 1,
+          borderColor: someMembersSelected ? 'primary.main' : 'divider',
+          borderRadius: 2,
+          '&:before': { display: 'none' },
+          mb: 1.5,
+          overflow: 'hidden',
+        }}
+      >
+        <AccordionSummary
+          expandIcon={!selectionMode ? <ExpandMoreIcon /> : null}
+          sx={{
+            bgcolor: 'action.hover',
+            cursor: selectionMode ? 'default' : 'pointer',
+            '& .MuiAccordionSummary-content': {
+              alignItems: 'center',
+              gap: 1.5,
+            },
+          }}
         >
           {selectionMode && (
-            <input
-              type="checkbox"
-              className="family-checkbox"
+            <Checkbox
+              inputRef={checkboxRef}
               checked={allMembersSelected}
-              ref={(input) => {
-                if (input) {
-                  input.indeterminate = someMembersSelected && !allMembersSelected;
-                }
-              }}
               onChange={handleFamilyCheckboxChange}
               onClick={(e) => e.stopPropagation()}
-              aria-label={`Select all members of ${family.name}`}
+              inputProps={{ 'aria-label': `Select all members of ${family.name}` }}
             />
           )}
-          <div className="family-header-left">
-            <span className="family-toggle">{isExpanded ? '▼' : '▶'}</span>
-            <h3 className="family-name">
-              {family.name}
-            </h3>
-          </div>
-          <div className="family-header-right">
-            <span className="family-count">{familyMembers.length} members</span>
-            {!readOnly && !selectionMode && (
-              <button
-                className="edit-family-button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowEditModal(true);
-                }}
-                aria-label={`Edit ${family.name} family`}
-              >
-                Edit
-              </button>
-            )}
-          </div>
-        </div>
-        {isExpanded && (
-          <div className="family-members">
+
+          <GroupIcon color="primary" />
+
+          <Typography variant="subtitle1" fontWeight={600} sx={{ flex: 1 }}>
+            {family.name}
+          </Typography>
+
+          <Chip
+            label={`${familyMembers.length} member${familyMembers.length !== 1 ? 's' : ''}`}
+            size="small"
+            variant="outlined"
+          />
+
+          {!readOnly && !selectionMode && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<EditIcon />}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowEditModal(true);
+              }}
+            >
+              Edit
+            </Button>
+          )}
+        </AccordionSummary>
+
+        <AccordionDetails sx={{ p: 0 }}>
+          <Stack spacing={0}>
             {familyMembers.map((guest) => (
-              <GuestItem
-                key={guest.id}
-                guest={guest}
-                categories={categories}
-                onUpdate={onUpdate}
-                eventId={eventId}
-                readOnly={readOnly}
-                events={events}
-                guestPresence={guestPresence[guest.id]}
-                selectionMode={selectionMode}
-                isSelected={selectedGuestIds.has(guest.id)}
-                onSelectionChange={onSelectionChange}
-              />
+              <Box key={guest.id} sx={{ borderTop: 1, borderColor: 'divider' }}>
+                <GuestItem
+                  guest={guest}
+                  categories={categories}
+                  onUpdate={onUpdate}
+                  eventId={eventId}
+                  readOnly={readOnly}
+                  events={events}
+                  guestPresence={guestPresence[guest.id]}
+                  selectionMode={selectionMode}
+                  isSelected={selectedGuestIds.has(guest.id)}
+                  onSelectionChange={onSelectionChange}
+                />
+              </Box>
             ))}
-          </div>
-        )}
-      </div>
+          </Stack>
+        </AccordionDetails>
+      </Accordion>
+
       {showEditModal && (
         <EditFamilyForm
           family={family}

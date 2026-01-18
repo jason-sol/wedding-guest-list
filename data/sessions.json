@@ -1,26 +1,19 @@
 {
   "sessions": {
-    "ba3a515ab520963153a672cec154431ffd03f3faf7796d8487f4293e8f103a8b": {
-      "userId": "user-1",
-      "username": "jason",
-      "isOwner": true,
-      "expiresAt": 1768748635670,
-      "createdAt": 1768662235670
-    },
-    "fb62df4955b7433be953c3f9cb8c9f60d8262b92422ae35b2a25e7bdd09e1086": {
-      "userId": "user-1",
-      "username": "jason",
-      "isOwner": true,
-      "expiresAt": 1768750105956,
-      "createdAt": 1768663705956
-    },
     "cb0dddea54d391dc5ca52d5d84ea793136a508f199ccd618c1a72d1343f8cfe5": {
       "userId": "user-1",
       "username": "jason",
       "isOwner": true,
       "expiresAt": 1768833916428,
       "createdAt": 1768747516428
+    },
+    "45bf8b71534e44f06f54093e1b1a7bed49c8c7c98e4eee1342de30c193e2c97f": {
+      "userId": "user-4",
+      "username": "jason",
+      "isOwner": true,
+      "expiresAt": 1768838488268,
+      "createdAt": 1768752088268
     }
   },
-  "lastCleanup": 1768747831072
+  "lastCleanup": 1768752089270
 }

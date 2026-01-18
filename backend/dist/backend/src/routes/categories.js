@@ -36,6 +36,32 @@ router.post('/', (req, res) => {
     const added = store_1.store.addCategory(category);
     (0, apiResponse_1.sendCreated)(res, added);
 });
+// PUT /api/categories/:name - Rename a category
+router.put('/:name', (req, res) => {
+    const oldName = decodeURIComponent(req.params.name);
+    const { name: newName } = req.body;
+    if (!newName || typeof newName !== 'string' || !newName.trim()) {
+        return (0, apiResponse_1.sendValidationError)(res, 'New category name is required');
+    }
+    const capitalizedNewName = (0, capitalize_1.capitalizeWords)(newName.trim());
+    // Check if old category exists
+    const category = store_1.store.getCategory(oldName);
+    if (!category) {
+        return (0, apiResponse_1.sendNotFound)(res, 'Category');
+    }
+    // Check if new name already exists (unless it's the same category with different case)
+    if (oldName.toLowerCase() !== capitalizedNewName.toLowerCase()) {
+        const existingCategories = store_1.store.getAllCategories();
+        if (existingCategories.some(c => c.name.toLowerCase() === capitalizedNewName.toLowerCase())) {
+            return (0, apiResponse_1.sendValidationError)(res, 'A category with this name already exists');
+        }
+    }
+    const renamed = store_1.store.renameCategory(oldName, capitalizedNewName);
+    if (!renamed) {
+        return (0, apiResponse_1.sendServerError)(res, 'Failed to rename category');
+    }
+    (0, apiResponse_1.sendSuccess)(res, renamed);
+});
 // DELETE /api/categories/:name - Delete a category
 router.delete('/:name', (req, res) => {
     const categoryName = decodeURIComponent(req.params.name);

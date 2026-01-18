@@ -4,7 +4,7 @@
  * Provides type-safe validation for all API inputs and data imports.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LoginSchema = exports.ImportDataSchema = exports.PermissionSchema = exports.SetPermissionSchema = exports.UserSchema = exports.UpdateUserSchema = exports.CreateUserSchema = exports.EventSchema = exports.ReorderEventsSchema = exports.UpdateEventSchema = exports.CreateEventSchema = exports.CategoryInfoSchema = exports.CreateCategorySchema = exports.FamilySchema = exports.CopyFamilySchema = exports.AddGuestToFamilySchema = exports.ReorderMembersSchema = exports.UpdateFamilySchema = exports.CreateFamilySchema = exports.FamilyMemberInputSchema = exports.CopyGuestSchema = exports.GuestSchema = exports.UpdateGuestSchema = exports.CreateGuestSchema = exports.PermissionLevelSchema = exports.RSVPStatusSchema = void 0;
+exports.LoginSchema = exports.ImportDataSchema = exports.PermissionSchema = exports.SetPermissionSchema = exports.UserSchema = exports.UpdateUserSchema = exports.CreateUserSchema = exports.EventSchema = exports.ReorderEventsSchema = exports.UpdateEventSchema = exports.CreateEventSchema = exports.CategoryInfoSchema = exports.CreateCategorySchema = exports.FamilySchema = exports.ReconstructFamiliesSchema = exports.CopyFamilySchema = exports.AddGuestToFamilySchema = exports.ReorderMembersSchema = exports.UpdateFamilySchema = exports.CreateFamilySchema = exports.FamilyMemberInputSchema = exports.CopyGuestSchema = exports.GuestSchema = exports.UpdateGuestSchema = exports.CreateGuestSchema = exports.PermissionLevelSchema = exports.RSVPStatusSchema = void 0;
 exports.validate = validate;
 const zod_1 = require("zod");
 const config_1 = require("./config");
@@ -152,6 +152,12 @@ exports.CopyFamilySchema = zod_1.z.object({
     targetEventId: zod_1.z.string().min(1, 'Target event ID is required'),
 });
 /**
+ * Schema for reconstructing families from a source event.
+ */
+exports.ReconstructFamiliesSchema = zod_1.z.object({
+    sourceEventId: zod_1.z.string().min(1, 'Source event ID is required'),
+});
+/**
  * Full family schema (for import validation).
  */
 exports.FamilySchema = zod_1.z.object({
@@ -240,7 +246,7 @@ exports.CreateUserSchema = zod_1.z.object({
         .regex(/^[a-zA-Z0-9_-]+$/, 'Username can only contain letters, numbers, underscores, and hyphens')
         .transform(s => s.toLowerCase()),
     password: zod_1.z.string()
-        .min(6, 'Password must be at least 6 characters')
+        .min(1, 'Password is required')
         .max(100, 'Password cannot exceed 100 characters'),
 });
 /**
@@ -248,7 +254,7 @@ exports.CreateUserSchema = zod_1.z.object({
  */
 exports.UpdateUserSchema = zod_1.z.object({
     password: zod_1.z.string()
-        .min(6, 'Password must be at least 6 characters')
+        .min(1, 'Password is required')
         .max(100, 'Password cannot exceed 100 characters')
         .optional(),
 });

@@ -1,8 +1,30 @@
+/**
+ * Add Guest Form using MUI Dialog
+ * Creates a new guest with optional category tags and event assignments
+ */
+
 import { useState } from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Button,
+  Box,
+  Typography,
+  IconButton,
+  FormGroup,
+  FormControlLabel,
+  Checkbox,
+  Divider,
+  CircularProgress,
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { Category, CategoryInfo, Event, PermissionLevel } from '../types';
 import { addGuest, copyGuest } from '../api';
 import CategoryDropdown from './CategoryDropdown';
-import './GuestForm.css';
 
 interface EventWithPermission extends Event {
   permission: PermissionLevel;
@@ -30,7 +52,6 @@ export default function GuestForm({
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Get other events where user has admin access
   const otherAdminEvents = events.filter(
     e => e.id !== eventId && e.permission === 'admin'
   );
@@ -48,7 +69,6 @@ export default function GuestForm({
 
     setIsSubmitting(true);
     try {
-      // Create guest in current event
       const newGuest = await addGuest(eventId, {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
@@ -56,7 +76,6 @@ export default function GuestForm({
         tags: selectedTags,
       });
 
-      // Copy to selected other events
       for (const targetEventId of selectedEvents) {
         try {
           await copyGuest(eventId, newGuest.id, targetEventId);
@@ -74,38 +93,51 @@ export default function GuestForm({
     }
   };
 
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Add Guest</h2>
-          <button className="close-button" onClick={onClose}>x</button>
-        </div>
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: { borderRadius: 3 },
+      }}
+    >
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <PersonAddIcon color="primary" />
+          <Typography variant="h6" fontWeight={600}>
+            Add Guest
+          </Typography>
+        </Box>
+        <IconButton onClick={onClose} size="small">
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
 
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="firstName">First Name</label>
-            <input
+      <Box component="form" onSubmit={handleSubmit}>
+        <DialogContent dividers>
+          <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+            <TextField
+              fullWidth
               id="firstName"
-              type="text"
+              label="First Name"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               placeholder="Optional"
               autoFocus
+              disabled={isSubmitting}
             />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="lastName">Last Name</label>
-            <input
+            <TextField
+              fullWidth
               id="lastName"
-              type="text"
+              label="Last Name"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               placeholder="Optional"
+              disabled={isSubmitting}
             />
-          </div>
+          </Box>
 
           <CategoryDropdown
             categories={categories}
@@ -121,34 +153,45 @@ export default function GuestForm({
           />
 
           {otherAdminEvents.length > 0 && (
-            <div className="form-group">
-              <label>Also add to other events:</label>
-              <div className="event-checkboxes">
-                {otherAdminEvents.map(event => (
-                  <label key={event.id} className="event-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={selectedEvents.includes(event.id)}
-                      onChange={() => toggleEvent(event.id)}
-                      disabled={isSubmitting}
+            <>
+              <Divider sx={{ my: 3 }} />
+              <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1.5 }}>
+                Also add to other events:
+              </Typography>
+              <FormGroup>
+                {[...otherAdminEvents]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(event => (
+                    <FormControlLabel
+                      key={event.id}
+                      control={
+                        <Checkbox
+                          checked={selectedEvents.includes(event.id)}
+                          onChange={() => toggleEvent(event.id)}
+                          disabled={isSubmitting}
+                        />
+                      }
+                      label={event.name}
                     />
-                    <span>{event.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+                  ))}
+              </FormGroup>
+            </>
           )}
+        </DialogContent>
 
-          <div className="form-actions">
-            <button type="button" onClick={onClose} disabled={isSubmitting}>
-              Cancel
-            </button>
-            <button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Adding...' : 'Add Guest'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={onClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? <CircularProgress size={20} color="inherit" /> : 'Add Guest'}
+          </Button>
+        </DialogActions>
+      </Box>
+    </Dialog>
   );
 }

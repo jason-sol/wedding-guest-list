@@ -1,11 +1,30 @@
+/**
+ * Guest List component using MUI
+ * Main container for displaying guests and families with selection and bulk actions
+ */
+
 import { useState, useMemo, useCallback } from 'react';
+import {
+  Box,
+  Paper,
+  Typography,
+  Button,
+  ButtonGroup,
+  Alert,
+  Chip,
+  Stack,
+} from '@mui/material';
+import CheckBoxIcon from '@mui/icons-material/CheckBox';
+import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
+import SelectAllIcon from '@mui/icons-material/SelectAll';
+import DeselectIcon from '@mui/icons-material/Deselect';
+import EventIcon from '@mui/icons-material/Event';
 import { Guest, Family, CategoryInfo, Event, PermissionLevel } from '../types';
 import { useFilteredGuests } from '../hooks/useFilteredGuests';
 import { GuestPresenceMap } from '../api';
 import GuestItem from './GuestItem';
 import FamilyGroup from './FamilyGroup';
 import BulkEventsModal from './BulkEventsModal';
-import './GuestList.css';
 
 interface EventWithPermission extends Event {
   permission: PermissionLevel;
@@ -40,7 +59,6 @@ export default function GuestList({
   const [selectedGuestIds, setSelectedGuestIds] = useState<Set<string>>(new Set());
   const [showBulkEventsModal, setShowBulkEventsModal] = useState(false);
 
-  // Selection handlers
   const handleSelectionChange = useCallback((guestId: string, selected: boolean) => {
     setSelectedGuestIds(prev => {
       const newSet = new Set(prev);
@@ -67,15 +85,12 @@ export default function GuestList({
     });
   }, []);
 
-  // Note: handleSelectAll needs filteredGuests, defined below via useMemo
-
   const handleDeselectAll = useCallback(() => {
     setSelectedGuestIds(new Set());
   }, []);
 
   const toggleSelectionMode = useCallback(() => {
     if (selectionMode) {
-      // Exiting selection mode - clear selections
       setSelectedGuestIds(new Set());
     }
     setSelectionMode(!selectionMode);
@@ -88,28 +103,23 @@ export default function GuestList({
     onUpdate();
   }, [onUpdate]);
 
-  // Ensure guests and families are arrays
   const safeGuests = Array.isArray(guests) ? guests : [];
   const safeFamilies = Array.isArray(families) ? families : [];
 
-  // Use shared filtering hook
   const filteredGuests = useFilteredGuests({
     guests: safeGuests,
     selectedCategories,
     searchTerm,
   });
 
-  // Filter families by search term
   const filteredFamilies = useMemo(() => {
     if (!searchTerm.trim()) return safeFamilies;
 
     const searchLower = searchTerm.toLowerCase().trim();
     return safeFamilies.filter(family => {
-      // Check if family name matches
       if (family.name.toLowerCase().includes(searchLower)) {
         return true;
       }
-      // Check if any family member's name matches
       return family.members.some(memberId => {
         const member = safeGuests.find(g => g.id === memberId);
         if (!member) return false;
@@ -119,7 +129,6 @@ export default function GuestList({
     });
   }, [safeFamilies, safeGuests, searchTerm]);
 
-  // Create a map of familyId -> first member's last name for sorting
   const familyLastNameMap = new Map<string, string>();
   filteredGuests.forEach(guest => {
     if (guest.familyId && !familyLastNameMap.has(guest.familyId)) {
@@ -127,10 +136,8 @@ export default function GuestList({
     }
   });
 
-  // Sort families by the last name of their first member
   const sortedFamilies = filteredFamilies
     .filter(f => {
-      // Only include families that have at least one guest in filtered list
       return filteredGuests.some(g => g.familyId === f.id);
     })
     .sort((a, b) => {
@@ -139,13 +146,10 @@ export default function GuestList({
       return aLastName.localeCompare(bLastName);
     });
 
-  // Get individual guests (already sorted by backend)
   const individualGuests = filteredGuests.filter((g) => !g.familyId);
 
-  // Create unified list: families and individuals sorted together
   const unifiedList: Array<{ type: 'family'; family: Family } | { type: 'individual'; guest: Guest }> = [];
 
-  // Add all families and individuals to the list
   sortedFamilies.forEach(family => {
     unifiedList.push({ type: 'family', family });
   });
@@ -154,7 +158,6 @@ export default function GuestList({
     unifiedList.push({ type: 'individual', guest });
   });
 
-  // Sort the unified list by last name to interleave families and individuals
   unifiedList.sort((a, b) => {
     let aLastName: string;
     let bLastName: string;
@@ -174,119 +177,145 @@ export default function GuestList({
     return aLastName.localeCompare(bLastName);
   });
 
-  // Calculate total unique guests (filtered)
   const totalGuests = filteredGuests.length;
-
-  // Get selected guests for bulk operations
   const selectedGuests = filteredGuests.filter(g => selectedGuestIds.has(g.id));
-
-  // Check if all filtered guests are selected
   const allSelected = filteredGuests.length > 0 && filteredGuests.every(g => selectedGuestIds.has(g.id));
   const someSelected = selectedGuestIds.size > 0;
 
   return (
-    <div className="guest-list">
+    <Box>
+      {/* Controls */}
       {!readOnly && (
-        <div className="guest-list-controls">
-          <button
-            className={`selection-mode-toggle ${selectionMode ? 'active' : ''}`}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+          <Button
+            variant={selectionMode ? 'contained' : 'outlined'}
+            startIcon={selectionMode ? <CheckBoxIcon /> : <CheckBoxOutlineBlankIcon />}
             onClick={toggleSelectionMode}
           >
             {selectionMode ? 'Done Selecting' : 'Select Guests'}
-          </button>
+          </Button>
 
           {selectionMode && filteredGuests.length > 0 && (
-            <div className="select-all-controls">
+            <ButtonGroup variant="outlined" size="small">
               {!allSelected ? (
-                <button
-                  className="select-all-button"
+                <Button
+                  startIcon={<SelectAllIcon />}
                   onClick={() => setSelectedGuestIds(new Set(filteredGuests.map(g => g.id)))}
                 >
                   Select All ({filteredGuests.length})
-                </button>
+                </Button>
               ) : (
-                <button
-                  className="deselect-all-button"
+                <Button
+                  startIcon={<DeselectIcon />}
                   onClick={handleDeselectAll}
                 >
                   Deselect All
-                </button>
+                </Button>
               )}
-            </div>
+            </ButtonGroup>
           )}
-        </div>
+        </Box>
       )}
 
-      {/* Bulk action bar - shown when guests are selected */}
+      {/* Bulk Action Bar */}
       {selectionMode && someSelected && (
-        <div className="bulk-action-bar">
-          <span className="selection-count">
-            {selectedGuestIds.size} guest{selectedGuestIds.size !== 1 ? 's' : ''} selected
-          </span>
-          <div className="bulk-actions">
-            <button
-              className="bulk-events-button"
-              onClick={() => setShowBulkEventsModal(true)}
-            >
-              Manage Events
-            </button>
-          </div>
-        </div>
+        <Paper
+          elevation={3}
+          sx={{
+            p: 2,
+            mb: 2,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+            borderRadius: 2,
+          }}
+        >
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Chip
+              label={`${selectedGuestIds.size} guest${selectedGuestIds.size !== 1 ? 's' : ''} selected`}
+              color="default"
+              sx={{ bgcolor: 'rgba(255,255,255,0.9)', fontWeight: 600 }}
+            />
+          </Stack>
+          <Button
+            variant="contained"
+            color="secondary"
+            startIcon={<EventIcon />}
+            onClick={() => setShowBulkEventsModal(true)}
+          >
+            Manage Events
+          </Button>
+        </Paper>
       )}
 
+      {/* Guest List */}
       {filteredGuests.length === 0 ? (
-        <div className="empty-state">
-          <p>
-            {searchTerm.trim()
-              ? `No guests or families found matching "${searchTerm}".`
-              : selectedCategories.length > 0
-              ? `No guests found in selected categories.`
-              : 'No guests yet. Add your first guest to get started!'}
-          </p>
-        </div>
+        <Alert severity="info" sx={{ mt: 2 }}>
+          {searchTerm.trim()
+            ? `No guests or families found matching "${searchTerm}".`
+            : selectedCategories.length > 0
+            ? `No guests found in selected categories.`
+            : 'No guests yet. Add your first guest to get started!'}
+        </Alert>
       ) : (
         <>
-          {unifiedList.map((item) => {
-            if (item.type === 'family') {
-              return (
-                <FamilyGroup
-                  key={item.family.id}
-                  family={item.family}
-                  guests={filteredGuests}
-                  allGuests={safeGuests}
-                  categories={categories}
-                  onUpdate={onUpdate}
-                  eventId={eventId}
-                  readOnly={readOnly}
-                  events={events}
-                  guestPresence={guestPresence}
-                  selectionMode={selectionMode}
-                  selectedGuestIds={selectedGuestIds}
-                  onSelectionChange={handleSelectionChange}
-                  onFamilySelectionChange={handleFamilySelectionChange}
-                />
-              );
-            } else {
-              return (
-                <GuestItem
-                  key={item.guest.id}
-                  guest={item.guest}
-                  categories={categories}
-                  onUpdate={onUpdate}
-                  eventId={eventId}
-                  readOnly={readOnly}
-                  events={events}
-                  guestPresence={guestPresence[item.guest.id]}
-                  selectionMode={selectionMode}
-                  isSelected={selectedGuestIds.has(item.guest.id)}
-                  onSelectionChange={handleSelectionChange}
-                />
-              );
-            }
-          })}
-          <div className="guest-count">
-            <p>Total Guests: <strong>{totalGuests}</strong></p>
-          </div>
+          <Stack spacing={1.5}>
+            {unifiedList.map((item) => {
+              if (item.type === 'family') {
+                return (
+                  <FamilyGroup
+                    key={item.family.id}
+                    family={item.family}
+                    guests={filteredGuests}
+                    allGuests={safeGuests}
+                    categories={categories}
+                    onUpdate={onUpdate}
+                    eventId={eventId}
+                    readOnly={readOnly}
+                    events={events}
+                    guestPresence={guestPresence}
+                    selectionMode={selectionMode}
+                    selectedGuestIds={selectedGuestIds}
+                    onSelectionChange={handleSelectionChange}
+                    onFamilySelectionChange={handleFamilySelectionChange}
+                  />
+                );
+              } else {
+                return (
+                  <GuestItem
+                    key={item.guest.id}
+                    guest={item.guest}
+                    categories={categories}
+                    onUpdate={onUpdate}
+                    eventId={eventId}
+                    readOnly={readOnly}
+                    events={events}
+                    guestPresence={guestPresence[item.guest.id]}
+                    selectionMode={selectionMode}
+                    isSelected={selectedGuestIds.has(item.guest.id)}
+                    onSelectionChange={handleSelectionChange}
+                  />
+                );
+              }
+            })}
+          </Stack>
+
+          <Paper
+            variant="outlined"
+            sx={{
+              mt: 3,
+              p: 2,
+              display: 'flex',
+              justifyContent: 'center',
+              bgcolor: 'action.hover',
+            }}
+          >
+            <Typography variant="body1">
+              Total Guests: <strong>{totalGuests}</strong>
+            </Typography>
+          </Paper>
         </>
       )}
 
@@ -300,6 +329,6 @@ export default function GuestList({
           onSuccess={handleBulkActionComplete}
         />
       )}
-    </div>
+    </Box>
   );
 }

@@ -1,7 +1,28 @@
+/**
+ * Assign Guest to Family Modal using MUI Dialog
+ * Allows assigning a guest to an existing family
+ */
+
 import { useState, useEffect } from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Button,
+  Typography,
+  IconButton,
+  CircularProgress,
+  Box,
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import GroupIcon from '@mui/icons-material/Group';
 import { Family, Guest } from '../types';
 import { fetchFamilies, addGuestToFamily } from '../api';
-import './AssignToFamilyModal.css';
 
 interface AssignToFamilyModalProps {
   guest: Guest;
@@ -19,6 +40,7 @@ export default function AssignToFamilyModal({
   const [families, setFamilies] = useState<Family[]>([]);
   const [selectedFamilyId, setSelectedFamilyId] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadFamilies();
@@ -30,6 +52,8 @@ export default function AssignToFamilyModal({
       setFamilies(data);
     } catch (error) {
       console.error('Failed to load families:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -54,41 +78,72 @@ export default function AssignToFamilyModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Assign {guest.firstName} {guest.lastName} to Family</h2>
-          <button className="close-button" onClick={onClose}>×</button>
-        </div>
-        
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="family">Select Family</label>
-            <select
-              id="family"
-              value={selectedFamilyId}
-              onChange={(e) => setSelectedFamilyId(e.target.value)}
-              required
-            >
-              <option value="">-- Select a family --</option>
-              {families.map((family) => (
-                <option key={family.id} value={family.id}>
-                  {family.name}
-                </option>
-              ))}
-            </select>
-          </div>
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: { borderRadius: 3 },
+      }}
+    >
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <GroupIcon color="primary" />
+          <Typography variant="h6" fontWeight={600}>
+            Assign to Family
+          </Typography>
+        </Box>
+        <IconButton onClick={onClose} size="small">
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
 
-          <div className="form-actions">
-            <button type="button" onClick={onClose} disabled={isSubmitting}>
-              Cancel
-            </button>
-            <button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Assigning...' : 'Assign to Family'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      <Box component="form" onSubmit={handleSubmit}>
+        <DialogContent dividers>
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+            Assign <strong>{guest.firstName} {guest.lastName}</strong> to a family group.
+          </Typography>
+
+          {isLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <FormControl fullWidth required>
+              <InputLabel id="family-select-label">Select Family</InputLabel>
+              <Select
+                labelId="family-select-label"
+                id="family-select"
+                value={selectedFamilyId}
+                label="Select Family"
+                onChange={(e) => setSelectedFamilyId(e.target.value)}
+              >
+                {[...families]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((family) => (
+                    <MenuItem key={family.id} value={family.id}>
+                      {family.name}
+                    </MenuItem>
+                  ))}
+              </Select>
+            </FormControl>
+          )}
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={onClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={isSubmitting || !selectedFamilyId || isLoading}
+          >
+            {isSubmitting ? <CircularProgress size={20} color="inherit" /> : 'Assign to Family'}
+          </Button>
+        </DialogActions>
+      </Box>
+    </Dialog>
   );
 }

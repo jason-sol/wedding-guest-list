@@ -1,9 +1,38 @@
+/**
+ * Edit Family Form using MUI Dialog
+ * Edit family name, manage members with drag-and-drop reordering, and delete family
+ */
+
 import { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Button,
+  Box,
+  Typography,
+  IconButton,
+  FormGroup,
+  FormControlLabel,
+  Checkbox,
+  Divider,
+  CircularProgress,
+  Paper,
+  Stack,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { Family, Guest, Category, CategoryInfo, Event, PermissionLevel } from '../types';
 import { updateFamily, reorderFamilyMembers, addGuestToFamily, removeGuestFromFamily, updateGuest, deleteFamily, deleteGuest, copyFamily, GuestPresenceMap } from '../api';
 import CategoryDropdown from './CategoryDropdown';
-import './EditFamilyForm.css';
-import './GuestForm.css';
 
 interface EventWithPermission extends Event {
   permission: PermissionLevel;
@@ -40,18 +69,14 @@ export default function EditFamilyForm({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteMembers, setDeleteMembers] = useState(false);
 
-  // Get other events where user has admin access
   const otherAdminEvents = useMemo(() =>
     events.filter(e => e.id !== eventId && e.permission === 'admin'),
     [events, eventId]
   );
 
-  // Calculate which events ALL family members are currently in (only on mount)
-  // Use a ref to store the original state so it doesn't change during the modal's lifetime
   const originalEventsRef = useRef<Set<string> | null>(null);
   const originalCategoriesRef = useRef<string[] | null>(null);
 
-  // Calculate original common categories on first render
   if (originalCategoriesRef.current === null) {
     if (familyGuests.length > 0) {
       originalCategoriesRef.current = familyGuests[0].tags.filter(tag =>
@@ -63,7 +88,6 @@ export default function EditFamilyForm({
   }
 
   if (originalEventsRef.current === null) {
-    // Calculate on first render only
     const eventIds = new Set<string>();
     if (familyGuests.length > 0) {
       const adminEvents = events.filter(e => e.id !== eventId && e.permission === 'admin');
@@ -80,9 +104,7 @@ export default function EditFamilyForm({
     originalEventsRef.current = eventIds;
   }
 
-  // Track which events the family should be in (initialized from presence)
   const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(() => {
-    // Calculate initial state inline
     if (familyGuests.length === 0) return new Set<string>();
 
     const eventIds = new Set<string>();
@@ -112,16 +134,13 @@ export default function EditFamilyForm({
     });
   };
 
-  // Sync state with family prop when it changes
   useEffect(() => {
     setFamilyName(family.name);
     setOrderedMemberIds(family.members);
   }, [family.name, family.members]);
 
-  // Initialize categories with common categories from all family members
   useEffect(() => {
     if (familyGuests.length > 0) {
-      // Get categories that all members have in common
       const commonCategories = familyGuests[0].tags.filter(tag =>
         familyGuests.every(guest => guest.tags.includes(tag))
       );
@@ -141,71 +160,54 @@ export default function EditFamilyForm({
 
     setIsSubmitting(true);
     try {
-      // Find newly added members and removed members
       const originalMemberIds = new Set(family.members);
       const newMemberIds = new Set(orderedMemberIds);
-      
+
       const addedMembers = orderedMemberIds.filter(id => !originalMemberIds.has(id));
       const removedMembers = family.members.filter(id => !newMemberIds.has(id));
 
-      // Remove guests from family
       for (const guestId of removedMembers) {
         await removeGuestFromFamily(eventId, family.id, guestId);
       }
 
-      // Add new guests to family
       for (const guestId of addedMembers) {
         await addGuestToFamily(eventId, family.id, guestId);
       }
 
-      // Update family name
       const updates: Partial<Family> = {
         name: familyName.trim(),
       };
 
       await updateFamily(eventId, family.id, updates);
 
-      // Reorder members if order changed
       if (JSON.stringify(orderedMemberIds) !== JSON.stringify(family.members)) {
         await reorderFamilyMembers(eventId, family.id, orderedMemberIds);
       }
 
-      // Apply selected categories to all family members
-      // Get the final list of members after all changes
       const finalMemberIds = orderedMemberIds;
       const originalCategories = originalCategoriesRef.current || [];
 
-      // Find categories that were removed (were in original but not in selected)
       const removedCategories = originalCategories.filter(cat => !selectedCategories.includes(cat));
-      // Find categories that were added (in selected but not in original)
       const addedCategories = selectedCategories.filter(cat => !originalCategories.includes(cat));
 
       for (const guestId of finalMemberIds) {
         const guest = allGuests.find(g => g.id === guestId);
         if (guest) {
-          // Start with existing tags
           let updatedTags = [...guest.tags];
-
-          // Remove categories that were unchecked
           updatedTags = updatedTags.filter(tag => !removedCategories.includes(tag));
-
-          // Add categories that were checked
           for (const cat of addedCategories) {
             if (!updatedTags.includes(cat)) {
               updatedTags.push(cat);
             }
           }
-
           await updateGuest(eventId, guestId, { tags: updatedTags });
         }
       }
 
-      // Determine which events to add to and which to remove from
       const originalEvents = originalEventsRef.current || new Set<string>();
       const eventsToAdd = Array.from(selectedEventIds).filter(id => !originalEvents.has(id));
       const eventsToRemove = Array.from(originalEvents).filter(id => !selectedEventIds.has(id));
 
-      // Copy family to newly selected events
       for (const targetEventId of eventsToAdd) {
         try {
           await copyFamily(eventId, family.id, targetEventId);
@@ -214,10 +216,8 @@ export default function EditFamilyForm({
         }
       }
 
-      // Remove family members from unselected events
       for (const targetEventId of eventsToRemove) {
         try {
-          // For each family member, find their guestId in the target event and delete
           for (const guest of familyGuests) {
             const presence = guestPresenceMap[guest.id] || [];
             const presenceInfo = presence.find(p => p.id === targetEventId);
@@ -280,13 +280,11 @@ export default function EditFamilyForm({
     setIsSubmitting(true);
     try {
       if (deleteMembers) {
-        // Delete all family members
         for (const guestId of family.members) {
           await deleteGuest(eventId, guestId);
         }
       }
 
-      // Delete the family (this will set familyId to null for remaining members)
       await deleteFamily(eventId, family.id);
       onSuccess();
     } catch (error) {
@@ -301,183 +299,241 @@ export default function EditFamilyForm({
     .map(id => familyGuests.find(g => g.id === id))
     .filter((g): g is Guest => g !== undefined);
 
-  // Available guests: those not in any family, or already in this family
   const availableGuests = allGuests.filter(
     g => !g.familyId || g.familyId === family.id
   );
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content edit-family-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Edit Family</h2>
-          <button className="close-button" onClick={onClose}>×</button>
-        </div>
+    <>
+      <Dialog
+        open
+        onClose={onClose}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: 3 },
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <EditIcon color="primary" />
+            <Typography variant="h6" fontWeight={600}>
+              Edit Family
+            </Typography>
+          </Box>
+          <IconButton onClick={onClose} size="small">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
 
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="familyName">Family Name *</label>
-            <input
+        <Box component="form" onSubmit={handleSubmit}>
+          <DialogContent dividers sx={{ maxHeight: '60vh' }}>
+            <TextField
+              fullWidth
               id="familyName"
-              type="text"
+              label="Family Name"
               value={familyName}
               onChange={(e) => setFamilyName(e.target.value)}
               required
               autoFocus
+              disabled={isSubmitting}
+              sx={{ mb: 3 }}
             />
-          </div>
 
-          <div className="form-group">
-            <label>Family Members (drag to reorder)</label>
-            <div className="member-list">
-              {orderedMembers.length === 0 ? (
-                <p className="no-members">No members in this family</p>
-              ) : (
-                orderedMembers.map((guest, index) => (
-                  <div
+            {/* Family Members Section */}
+            <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1.5 }}>
+              Family Members (drag to reorder)
+            </Typography>
+            {orderedMembers.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                No members in this family
+              </Typography>
+            ) : (
+              <Stack spacing={1} sx={{ mb: 3 }}>
+                {orderedMembers.map((guest, index) => (
+                  <Paper
                     key={guest.id}
-                    className={`member-item ${draggedIndex === index ? 'dragging' : ''}`}
+                    variant="outlined"
                     draggable
                     onDragStart={() => handleDragStart(index)}
                     onDragOver={(e) => handleDragOver(e, index)}
                     onDragEnd={handleDragEnd}
+                    sx={{
+                      p: 1.5,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      cursor: 'grab',
+                      bgcolor: draggedIndex === index ? 'action.selected' : 'background.paper',
+                      '&:hover': {
+                        bgcolor: 'action.hover',
+                      },
+                      transition: 'background-color 0.2s',
+                    }}
                   >
-                    <span className="drag-handle">☰</span>
-                    <span className="member-name">
+                    <DragIndicatorIcon color="action" sx={{ cursor: 'grab' }} />
+                    <Typography sx={{ flex: 1 }}>
                       {guest.firstName} {guest.lastName}
-                    </span>
-                    <button
-                      type="button"
-                      className="remove-member-btn"
+                    </Typography>
+                    <Button
+                      size="small"
+                      color="error"
                       onClick={() => removeMember(guest.id)}
                     >
                       Remove
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+                    </Button>
+                  </Paper>
+                ))}
+              </Stack>
+            )}
 
-          <div className="form-group">
-            <label>Add Member</label>
-            <select
-              value=""
-              onChange={(e) => {
-                if (e.target.value) {
-                  addMember(e.target.value);
-                  e.target.value = '';
+            {/* Add Member Section */}
+            <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1.5 }}>
+              Add Member
+            </Typography>
+            <FormControl fullWidth size="small" sx={{ mb: 3 }}>
+              <InputLabel id="add-member-label">Select a guest to add</InputLabel>
+              <Select
+                labelId="add-member-label"
+                value=""
+                label="Select a guest to add"
+                onChange={(e) => {
+                  if (e.target.value) {
+                    addMember(e.target.value);
+                  }
+                }}
+              >
+                {availableGuests
+                  .filter(g => !orderedMemberIds.includes(g.id))
+                  .map(guest => (
+                    <MenuItem key={guest.id} value={guest.id}>
+                      {guest.firstName} {guest.lastName}
+                    </MenuItem>
+                  ))}
+              </Select>
+            </FormControl>
+
+            <CategoryDropdown
+              categories={categories}
+              selectedCategories={selectedCategories}
+              onSelect={(category) => {
+                if (!selectedCategories.includes(category)) {
+                  setSelectedCategories([...selectedCategories, category]);
                 }
               }}
-            >
-              <option value="">Select a guest to add...</option>
-              {availableGuests
-                .filter(g => !orderedMemberIds.includes(g.id))
-                .map(guest => (
-                  <option key={guest.id} value={guest.id}>
-                    {guest.firstName} {guest.lastName}
-                  </option>
-                ))}
-            </select>
-          </div>
+              onRemove={(category) => {
+                setSelectedCategories(selectedCategories.filter(t => t !== category));
+              }}
+              label="Categories (applied to all family members)"
+            />
 
-          <CategoryDropdown
-            categories={categories}
-            selectedCategories={selectedCategories}
-            onSelect={(category) => {
-              if (!selectedCategories.includes(category)) {
-                setSelectedCategories([...selectedCategories, category]);
-              }
-            }}
-            onRemove={(category) => {
-              setSelectedCategories(selectedCategories.filter(t => t !== category));
-            }}
-            label="Categories (applied to all family members)"
-          />
-
-          {otherAdminEvents.length > 0 && (
-            <div className="form-group">
-              <label>Event Invitations:</label>
-              <div className="event-checkboxes">
-                {otherAdminEvents.map(event => (
-                  <label key={event.id} className="event-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={selectedEventIds.has(event.id)}
-                      onChange={() => toggleEvent(event.id)}
-                      disabled={isSubmitting}
+            {otherAdminEvents.length > 0 && (
+              <>
+                <Divider sx={{ my: 3 }} />
+                <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1.5 }}>
+                  Event Invitations:
+                </Typography>
+                <FormGroup>
+                  {otherAdminEvents.map(event => (
+                    <FormControlLabel
+                      key={event.id}
+                      control={
+                        <Checkbox
+                          checked={selectedEventIds.has(event.id)}
+                          onChange={() => toggleEvent(event.id)}
+                          disabled={isSubmitting}
+                        />
+                      }
+                      label={event.name}
                     />
-                    <span>{event.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
+                  ))}
+                </FormGroup>
+              </>
+            )}
+          </DialogContent>
 
-          <div className="form-actions">
-            <button 
-              type="button" 
-              onClick={handleDeleteFamily} 
+          <DialogActions sx={{ px: 3, py: 2, justifyContent: 'space-between' }}>
+            <Button
+              color="error"
+              onClick={handleDeleteFamily}
               disabled={isSubmitting}
-              className="delete-family-button"
+              startIcon={<DeleteIcon />}
             >
               Remove Family
-            </button>
-            <div style={{ display: 'flex', gap: '12px', marginLeft: 'auto' }}>
-              <button type="button" onClick={onClose} disabled={isSubmitting}>
+            </Button>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button onClick={onClose} disabled={isSubmitting}>
                 Cancel
-              </button>
-              <button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
-          </div>
-        </form>
+              </Button>
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? <CircularProgress size={20} color="inherit" /> : 'Save Changes'}
+              </Button>
+            </Box>
+          </DialogActions>
+        </Box>
+      </Dialog>
 
-        {showDeleteConfirm && (
-          <div className="delete-confirm-overlay" onClick={() => setShowDeleteConfirm(false)}>
-            <div className="delete-confirm-dialog" onClick={(e) => e.stopPropagation()}>
-              <h3>Remove Family</h3>
-              <p>Are you sure you want to remove the "{family.name}" family?</p>
-              <div className="delete-confirm-options">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={deleteMembers}
-                    onChange={(e) => setDeleteMembers(e.target.checked)}
-                  />
-                  <span>Also remove all family members</span>
-                </label>
-                <p className="delete-confirm-note">
-                  {deleteMembers 
-                    ? 'All family members will be permanently deleted.' 
-                    : 'Family members will be kept but removed from the family grouping.'}
-                </p>
-              </div>
-              <div className="delete-confirm-actions">
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    setShowDeleteConfirm(false);
-                    setDeleteMembers(false);
-                  }}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="button" 
-                  onClick={handleDeleteFamily}
-                  disabled={isSubmitting}
-                  className="delete-confirm-button"
-                >
-                  {isSubmitting ? 'Removing...' : 'Remove Family'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setDeleteMembers(false);
+        }}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: 3 },
+        }}
+      >
+        <DialogTitle>
+          <Typography variant="h6" fontWeight={600}>
+            Remove Family
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Are you sure you want to remove the "{family.name}" family?
+          </Typography>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={deleteMembers}
+                onChange={(e) => setDeleteMembers(e.target.checked)}
+              />
+            }
+            label="Also remove all family members"
+          />
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            {deleteMembers
+              ? 'All family members will be permanently deleted.'
+              : 'Family members will be kept but removed from the family grouping.'}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button
+            onClick={() => {
+              setShowDeleteConfirm(false);
+              setDeleteMembers(false);
+            }}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteFamily}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? <CircularProgress size={20} color="inherit" /> : 'Remove Family'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }

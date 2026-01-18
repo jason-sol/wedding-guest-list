@@ -53,6 +53,39 @@ router.post('/', (req: Request, res: Response) => {
   sendCreated(res, added);
 });
 
+// PUT /api/categories/:name - Rename a category
+router.put('/:name', (req: Request, res: Response) => {
+  const oldName = decodeURIComponent(req.params.name);
+  const { name: newName } = req.body;
+
+  if (!newName || typeof newName !== 'string' || !newName.trim()) {
+    return sendValidationError(res, 'New category name is required');
+  }
+
+  const capitalizedNewName = capitalizeWords(newName.trim());
+
+  // Check if old category exists
+  const category = store.getCategory(oldName);
+  if (!category) {
+    return sendNotFound(res, 'Category');
+  }
+
+  // Check if new name already exists (unless it's the same category with different case)
+  if (oldName.toLowerCase() !== capitalizedNewName.toLowerCase()) {
+    const existingCategories = store.getAllCategories();
+    if (existingCategories.some(c => c.name.toLowerCase() === capitalizedNewName.toLowerCase())) {
+      return sendValidationError(res, 'A category with this name already exists');
+    }
+  }
+
+  const renamed = store.renameCategory(oldName, capitalizedNewName);
+  if (!renamed) {
+    return sendServerError(res, 'Failed to rename category');
+  }
+
+  sendSuccess(res, renamed);
+});
+
 // DELETE /api/categories/:name - Delete a category
 router.delete('/:name', (req: Request, res: Response) => {
   const categoryName = decodeURIComponent(req.params.name);

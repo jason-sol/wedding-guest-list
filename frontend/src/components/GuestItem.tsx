@@ -1,10 +1,26 @@
+/**
+ * Guest Item component using MUI
+ * Displays a single guest with categories, actions, and selection support
+ */
+
 import { useState } from 'react';
+import {
+  Box,
+  Paper,
+  Typography,
+  Button,
+  Checkbox,
+  Stack,
+  Chip,
+} from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
+import GroupAddIcon from '@mui/icons-material/GroupAdd';
+import GroupRemoveIcon from '@mui/icons-material/GroupRemove';
 import { Guest, CategoryInfo, Event, PermissionLevel } from '../types';
 import { removeGuestFromFamily, GuestPresenceInfo } from '../api';
 import CategoryTag from './CategoryTag';
 import AssignToFamilyModal from './AssignToFamilyModal';
 import EditGuestForm from './EditGuestForm';
-import './GuestItem.css';
 
 interface EventWithPermission extends Event {
   permission: PermissionLevel;
@@ -54,69 +70,107 @@ export default function GuestItem({
 
   return (
     <>
-      <div className={`guest-item ${isSelected ? 'selected' : ''}`}>
+      <Paper
+        variant="outlined"
+        sx={{
+          p: 2,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          bgcolor: isSelected ? 'action.selected' : 'background.paper',
+          transition: 'background-color 0.2s',
+          '&:hover': {
+            bgcolor: isSelected ? 'action.selected' : 'action.hover',
+          },
+        }}
+      >
         {selectionMode && (
-          <input
-            type="checkbox"
-            className="guest-checkbox"
+          <Checkbox
             checked={isSelected}
             onChange={(e) => onSelectionChange?.(guest.id, e.target.checked)}
-            aria-label={`Select ${guest.firstName} ${guest.lastName}`}
+            inputProps={{ 'aria-label': `Select ${guest.firstName} ${guest.lastName}` }}
           />
         )}
-        <div className="guest-name">
-          <span className="first-name">{guest.firstName}</span>
-          <span className="last-name">{guest.lastName}</span>
-          {guestPresence.length > 0 && (
-            <span className="guest-event-badges">
-              {guestPresence.map((event) => (
-                <span key={event.id} className="event-badge" title={`Also in ${event.name}`}>
-                  {event.name}
-                </span>
-              ))}
-            </span>
+
+        {/* Guest Name and Event Badges */}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant="body1" fontWeight={500}>
+              {guest.firstName}
+            </Typography>
+            <Typography variant="body1" fontWeight={600}>
+              {guest.lastName}
+            </Typography>
+            {guestPresence.length > 0 && (
+              <Stack direction="row" spacing={0.5}>
+                {guestPresence.map((event) => (
+                  <Chip
+                    key={event.id}
+                    label={event.name}
+                    size="small"
+                    variant="outlined"
+                    sx={{
+                      height: 20,
+                      fontSize: '0.7rem',
+                      '& .MuiChip-label': { px: 1 },
+                    }}
+                  />
+                ))}
+              </Stack>
+            )}
+          </Box>
+
+          {/* Category Tags */}
+          {guest.tags.length > 0 && (
+            <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+              {[...guest.tags].sort().map((tag, index) => {
+                const catInfo = categories.find(c => c.name === tag);
+                return (
+                  <CategoryTag key={index} category={tag} categoryInfo={catInfo} />
+                );
+              })}
+            </Stack>
           )}
-        </div>
-        {guest.tags.length > 0 && (
-          <div className="guest-tags">
-            {[...guest.tags].sort().map((tag, index) => {
-              const catInfo = categories.find(c => c.name === tag);
-              return (
-                <CategoryTag key={index} category={tag} categoryInfo={catInfo} />
-              );
-            })}
-          </div>
-        )}
+        </Box>
+
+        {/* Actions */}
         {!readOnly && !selectionMode && (
-          <div className="guest-actions">
+          <Stack direction="row" spacing={1}>
             {!guest.familyId && (
-              <button
-                className="assign-button"
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<GroupAddIcon />}
                 onClick={() => setShowAssignModal(true)}
-                aria-label={`Assign ${guest.firstName} ${guest.lastName} to family`}
+                sx={{ whiteSpace: 'nowrap' }}
               >
                 Assign to Family
-              </button>
+              </Button>
             )}
             {guest.familyId && (
-              <button
-                className="remove-family-button"
+              <Button
+                size="small"
+                variant="outlined"
+                color="warning"
+                startIcon={<GroupRemoveIcon />}
                 onClick={handleRemoveFromFamily}
-                aria-label={`Remove ${guest.firstName} ${guest.lastName} from family`}
+                sx={{ whiteSpace: 'nowrap' }}
               >
                 Remove from Family
-              </button>
+              </Button>
             )}
-            <button
-              className="edit-button"
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<EditIcon />}
               onClick={() => setShowEditModal(true)}
-              aria-label={`Edit ${guest.firstName} ${guest.lastName}`}
             >
               Edit
-            </button>
-          </div>
+            </Button>
+          </Stack>
         )}
-      </div>
+      </Paper>
+
       {showAssignModal && (
         <AssignToFamilyModal
           guest={guest}

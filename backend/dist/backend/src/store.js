@@ -557,21 +557,139 @@ class DataStore {
         return deleted;
     }
     /**
-     * Copy a guest to another event.
+     * Copy a guest to another event, preserving family relationships.
      */
     copyGuestToEvent(guestId, targetEventId) {
         const sourceGuest = this.guests.get(guestId);
         if (!sourceGuest)
             return null;
+        // Check if a guest with the same name already exists in the target event
+        const targetEventGuests = this.getGuestsForEvent(targetEventId);
+        const existingGuest = targetEventGuests.find(g => g.firstName.toLowerCase() === sourceGuest.firstName.toLowerCase() &&
+            g.lastName.toLowerCase() === sourceGuest.lastName.toLowerCase());
+        if (existingGuest) {
+            // Guest already exists in target event, but check if we need to add them to a family
+            if (!existingGuest.familyId && sourceGuest.familyId) {
+                this.ensureFamilyForGuestInEvent(existingGuest, sourceGuest.familyId, targetEventId);
+            }
+            return existingGuest;
+        }
+        // Create the new guest first (without family)
         const newGuest = this.addGuest({
             eventId: targetEventId,
             firstName: sourceGuest.firstName,
             lastName: sourceGuest.lastName,
-            familyId: null, // Don't copy family reference
+            familyId: null,
             tags: [...sourceGuest.tags],
             rsvp: undefined, // Reset RSVP for new event
         });
+        // If source guest belongs to a family, try to preserve the relationship
+        if (sourceGuest.familyId) {
+            this.ensureFamilyForGuestInEvent(newGuest, sourceGuest.familyId, targetEventId);
+        }
         return newGuest;
+    }
+    /**
+     * Ensure a guest is part of the appropriate family in the target event.
+     * Creates the family if it doesn't exist, or adds to existing family.
+     */
+    ensureFamilyForGuestInEvent(guest, sourceFamilyId, targetEventId) {
+        const sourceFamily = this.families.get(sourceFamilyId);
+        if (!sourceFamily)
+            return;
+        const targetEventFamilies = this.getFamiliesForEvent(targetEventId);
+        const targetEventGuests = this.getGuestsForEvent(targetEventId);
+        // Find if a family with the same name already exists in the target event
+        let targetFamily = targetEventFamilies.find(f => f.name.toLowerCase() === sourceFamily.name.toLowerCase());
+        if (!targetFamily) {
+            // Check if any other family members from the source family exist in the target event
+            const sourceFamilyMembers = sourceFamily.members
+                .map(id => this.guests.get(id))
+                .filter((g) => g !== undefined);
+            const existingMembersInTarget = targetEventGuests.filter(targetGuest => {
+                return sourceFamilyMembers.some(sourceMember => sourceMember.firstName.toLowerCase() === targetGuest.firstName.toLowerCase() &&
+                    sourceMember.lastName.toLowerCase() === targetGuest.lastName.toLowerCase());
+            });
+            // Only create family if there are at least 2 members (including this guest)
+            if (existingMembersInTarget.length >= 1) {
+                // Create a new family in the target event
+                targetFamily = this.addFamily({
+                    eventId: targetEventId,
+                    name: sourceFamily.name,
+                    members: [],
+                });
+                // Add existing members to the new family
+                for (const member of existingMembersInTarget) {
+                    if (!targetFamily.members.includes(member.id)) {
+                        targetFamily.members.push(member.id);
+                        member.familyId = targetFamily.id;
+                        this.guests.set(member.id, member);
+                    }
+                }
+                this.families.set(targetFamily.id, targetFamily);
+            }
+        }
+        // Add this guest to the target family
+        if (targetFamily && !targetFamily.members.includes(guest.id)) {
+            targetFamily.members.push(guest.id);
+            this.families.set(targetFamily.id, targetFamily);
+            guest.familyId = targetFamily.id;
+            this.guests.set(guest.id, guest);
+        }
+        this.scheduleSave();
+    }
+    /**
+     * Reconstruct family relationships in a target event based on a source event.
+     * This is useful for fixing events where families were lost during copy.
+     */
+    reconstructFamiliesFromSource(sourceEventId, targetEventId) {
+        const sourceGuests = this.getGuestsForEvent(sourceEventId);
+        const sourceFamilies = this.getFamiliesForEvent(sourceEventId);
+        const targetGuests = this.getGuestsForEvent(targetEventId);
+        const targetFamilies = this.getFamiliesForEvent(targetEventId);
+        let familiesCreated = 0;
+        let guestsUpdated = 0;
+        // For each family in source event
+        for (const sourceFamily of sourceFamilies) {
+            // Get the source family members
+            const sourceFamilyMembers = sourceFamily.members
+                .map(id => this.guests.get(id))
+                .filter((g) => g !== undefined);
+            // Find matching guests in target event (by name)
+            const matchingTargetGuests = targetGuests.filter(targetGuest => {
+                // Skip if already in a family
+                if (targetGuest.familyId)
+                    return false;
+                return sourceFamilyMembers.some(sourceMember => sourceMember.firstName.toLowerCase() === targetGuest.firstName.toLowerCase() &&
+                    sourceMember.lastName.toLowerCase() === targetGuest.lastName.toLowerCase());
+            });
+            // If we have at least 2 matching guests, create a family
+            if (matchingTargetGuests.length >= 2) {
+                // Check if family with same name already exists
+                let targetFamily = targetFamilies.find(f => f.name.toLowerCase() === sourceFamily.name.toLowerCase());
+                if (!targetFamily) {
+                    // Create new family
+                    targetFamily = this.addFamily({
+                        eventId: targetEventId,
+                        name: sourceFamily.name,
+                        members: [],
+                    });
+                    familiesCreated++;
+                }
+                // Add guests to the family
+                for (const guest of matchingTargetGuests) {
+                    if (!targetFamily.members.includes(guest.id)) {
+                        targetFamily.members.push(guest.id);
+                        guest.familyId = targetFamily.id;
+                        this.guests.set(guest.id, guest);
+                        guestsUpdated++;
+                    }
+                }
+                this.families.set(targetFamily.id, targetFamily);
+            }
+        }
+        this.scheduleSave();
+        return { familiesCreated, guestsUpdated };
     }
     // ============================================================
     // Family operations (event-scoped)
@@ -626,37 +744,69 @@ class DataStore {
         const sourceFamily = this.families.get(familyId);
         if (!sourceFamily)
             return null;
-        // Copy all member guests first
+        const targetEventGuests = this.getGuestsForEvent(targetEventId);
+        const targetEventFamilies = this.getFamiliesForEvent(targetEventId);
+        // Check if family with same name already exists
+        const existingFamily = targetEventFamilies.find(f => f.name.toLowerCase() === sourceFamily.name.toLowerCase());
+        // Copy all member guests (or use existing ones)
         const copiedGuests = [];
         const memberIdMap = new Map(); // old ID -> new ID
         for (const memberId of sourceFamily.members) {
             const sourceGuest = this.guests.get(memberId);
             if (sourceGuest) {
-                const newGuest = this.addGuest({
-                    eventId: targetEventId,
-                    firstName: sourceGuest.firstName,
-                    lastName: sourceGuest.lastName,
-                    familyId: null, // Will be set below
-                    tags: [...sourceGuest.tags],
-                    rsvp: undefined,
-                });
-                copiedGuests.push(newGuest);
-                memberIdMap.set(memberId, newGuest.id);
+                // Check if guest with same name already exists in target event
+                const existingGuest = targetEventGuests.find(g => g.firstName.toLowerCase() === sourceGuest.firstName.toLowerCase() &&
+                    g.lastName.toLowerCase() === sourceGuest.lastName.toLowerCase());
+                if (existingGuest) {
+                    // Use existing guest
+                    copiedGuests.push(existingGuest);
+                    memberIdMap.set(memberId, existingGuest.id);
+                }
+                else {
+                    // Create new guest
+                    const newGuest = this.addGuest({
+                        eventId: targetEventId,
+                        firstName: sourceGuest.firstName,
+                        lastName: sourceGuest.lastName,
+                        familyId: null, // Will be set below
+                        tags: [...sourceGuest.tags],
+                        rsvp: undefined,
+                    });
+                    copiedGuests.push(newGuest);
+                    memberIdMap.set(memberId, newGuest.id);
+                }
             }
         }
-        // Create the family with new member IDs
-        const newFamily = this.addFamily({
-            eventId: targetEventId,
-            name: sourceFamily.name,
-            members: copiedGuests.map(g => g.id),
-        });
+        let family;
+        if (existingFamily) {
+            // Add members to existing family (if not already in it)
+            const existingMemberIds = new Set(existingFamily.members);
+            const newMemberIds = copiedGuests
+                .filter(g => !existingMemberIds.has(g.id))
+                .map(g => g.id);
+            if (newMemberIds.length > 0) {
+                existingFamily.members = [...existingFamily.members, ...newMemberIds];
+                this.families.set(existingFamily.id, existingFamily);
+            }
+            family = existingFamily;
+        }
+        else {
+            // Create the family with new member IDs
+            family = this.addFamily({
+                eventId: targetEventId,
+                name: sourceFamily.name,
+                members: copiedGuests.map(g => g.id),
+            });
+        }
         // Update guests with family reference
         for (const guest of copiedGuests) {
-            guest.familyId = newFamily.id;
-            this.guests.set(guest.id, guest);
+            if (guest.familyId !== family.id) {
+                guest.familyId = family.id;
+                this.guests.set(guest.id, guest);
+            }
         }
         this.scheduleSave();
-        return { family: newFamily, guests: copiedGuests };
+        return { family, guests: copiedGuests };
     }
     // ============================================================
     // Category operations (global - not event-scoped)
@@ -678,6 +828,35 @@ class DataStore {
             this.scheduleSave();
         }
         return deleted;
+    }
+    renameCategory(oldName, newName) {
+        const category = this.categories.get(oldName.toLowerCase());
+        if (!category) {
+            return null;
+        }
+        // Use the actual stored category name for comparisons
+        const actualOldName = category.name;
+        // Check if new name already exists (case insensitive)
+        if (actualOldName.toLowerCase() !== newName.toLowerCase() &&
+            this.categories.has(newName.toLowerCase())) {
+            return null;
+        }
+        // Update the category
+        this.categories.delete(actualOldName.toLowerCase());
+        const updatedCategory = {
+            ...category,
+            name: newName,
+        };
+        this.categories.set(newName.toLowerCase(), updatedCategory);
+        // Update all guests that have this tag
+        this.guests.forEach((guest, guestId) => {
+            if (guest.tags.includes(actualOldName)) {
+                const updatedTags = guest.tags.map(tag => tag === actualOldName ? newName : tag);
+                this.guests.set(guestId, { ...guest, tags: updatedTags });
+            }
+        });
+        this.scheduleSave();
+        return updatedCategory;
     }
     // ============================================================
     // Utility operations

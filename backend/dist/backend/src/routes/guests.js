@@ -36,53 +36,60 @@ router.get('/presence', permissions_1.requireEventViewer, (req, res) => {
     const eventGuests = store_1.store.getGuestsForEvent(eventId);
     const allGuests = store_1.store.getAllGuests();
     const allEvents = store_1.store.getAllEvents();
-    // Build a map of guest name -> set of other event IDs they appear in
-    const guestNameToOtherEvents = new Map();
-    // First, find all guests with their events
-    const guestNameToEventIds = new Map();
+    // Build a map of guest name -> array of guests in other events
+    const guestNameToGuestsInOtherEvents = new Map();
+    // First, group all guests by normalized name
     for (const guest of allGuests) {
         const key = `${guest.firstName.toLowerCase()} ${guest.lastName.toLowerCase()}`.trim();
         if (!key)
             continue;
-        if (!guestNameToEventIds.has(key)) {
-            guestNameToEventIds.set(key, new Set());
+        if (!guestNameToGuestsInOtherEvents.has(key)) {
+            guestNameToGuestsInOtherEvents.set(key, []);
         }
-        guestNameToEventIds.get(key).add(guest.eventId);
+        guestNameToGuestsInOtherEvents.get(key).push(guest);
     }
+    // Convert to response format: guestId -> [{id: eventId, name: eventName, guestId: guestIdInThatEvent}]
+    const result = {};
     // For each guest in the current event, find other events they're in (that user can view)
     for (const guest of eventGuests) {
         const key = `${guest.firstName.toLowerCase()} ${guest.lastName.toLowerCase()}`.trim();
         if (!key)
             continue;
-        const allEventIdsForName = guestNameToEventIds.get(key);
-        if (!allEventIdsForName)
+        const guestsWithSameName = guestNameToGuestsInOtherEvents.get(key);
+        if (!guestsWithSameName)
             continue;
-        const otherEventIds = new Set();
-        for (const evtId of allEventIdsForName) {
-            if (evtId === eventId)
+        // Use a Map to deduplicate by event ID (keep only one guest per event)
+        const otherEventEntriesMap = new Map();
+        for (const otherGuest of guestsWithSameName) {
+            if (otherGuest.eventId === eventId)
                 continue; // Skip current event
+            if (otherEventEntriesMap.has(otherGuest.eventId))
+                continue; // Skip if we already have this event
             // Check if user has at least viewer permission on this event
+            let hasAccess = false;
             if (req.user?.isOwner) {
-                otherEventIds.add(evtId);
+                hasAccess = true;
             }
             else {
-                const perm = store_1.store.getPermission(req.user.userId, evtId);
+                const perm = store_1.store.getPermission(req.user.userId, otherGuest.eventId);
                 if (perm !== 'none') {
-                    otherEventIds.add(evtId);
+                    hasAccess = true;
+                }
+            }
+            if (hasAccess) {
+                const event = allEvents.find(e => e.id === otherGuest.eventId);
+                if (event) {
+                    otherEventEntriesMap.set(otherGuest.eventId, {
+                        id: event.id,
+                        name: event.name,
+                        guestId: otherGuest.id,
+                    });
                 }
             }
         }
-        if (otherEventIds.size > 0) {
-            guestNameToOtherEvents.set(guest.id, otherEventIds);
+        if (otherEventEntriesMap.size > 0) {
+            result[guest.id] = Array.from(otherEventEntriesMap.values());
         }
-    }
-    // Convert to response format: guestId -> [{id, name}]
-    const result = {};
-    for (const [guestId, eventIds] of guestNameToOtherEvents) {
-        result[guestId] = Array.from(eventIds)
-            .map(id => allEvents.find(e => e.id === id))
-            .filter((e) => e !== undefined)
-            .map(e => ({ id: e.id, name: e.name }));
     }
     (0, apiResponse_1.sendSuccess)(res, result);
 });

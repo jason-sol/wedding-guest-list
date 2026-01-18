@@ -1,8 +1,33 @@
+/**
+ * Bulk Events Modal using MUI Dialog
+ * Manage event assignments for multiple selected guests
+ */
+
 import { useState } from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Box,
+  Typography,
+  IconButton,
+  Chip,
+  Stack,
+  Paper,
+  Divider,
+  LinearProgress,
+  Alert,
+  CircularProgress,
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import EventIcon from '@mui/icons-material/Event';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { Event, PermissionLevel, Guest } from '../types';
 import { copyGuest, deleteGuest } from '../api';
-import './BulkEventsModal.css';
-import './GuestForm.css';
 
 interface EventWithPermission extends Event {
   permission: PermissionLevel;
@@ -28,39 +53,37 @@ export default function BulkEventsModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Get all events (including current)
   const allEvents = events.filter(e => e.permission === 'admin');
   const currentEvent = events.find(e => e.id === currentEventId);
 
-  // Calculate which events each guest is in
   const getGuestEventIds = (guestId: string): Set<string> => {
     const presence = guestPresenceMap[guestId] || [];
     const eventIds = new Set(presence.map(e => e.id));
-    eventIds.add(currentEventId); // Always in current event
+    eventIds.add(currentEventId);
     return eventIds;
   };
 
-  // For each event, check how many selected guests are in it
-  const eventStats = allEvents.map(event => {
-    const guestsInEvent = selectedGuests.filter(g => {
-      const eventIds = getGuestEventIds(g.id);
-      return eventIds.has(event.id);
+  const eventStats = [...allEvents]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(event => {
+      const guestsInEvent = selectedGuests.filter(g => {
+        const eventIds = getGuestEventIds(g.id);
+        return eventIds.has(event.id);
+      });
+      return {
+        event,
+        count: guestsInEvent.length,
+        total: selectedGuests.length,
+        allIn: guestsInEvent.length === selectedGuests.length,
+        noneIn: guestsInEvent.length === 0,
+      };
     });
-    return {
-      event,
-      count: guestsInEvent.length,
-      total: selectedGuests.length,
-      allIn: guestsInEvent.length === selectedGuests.length,
-      noneIn: guestsInEvent.length === 0,
-    };
-  });
 
   const handleAddToEvent = async (targetEventId: string) => {
     if (targetEventId === currentEventId) return;
 
     setIsProcessing(true);
     try {
-      // Copy guests that aren't already in the target event
       for (const guest of selectedGuests) {
         const eventIds = getGuestEventIds(guest.id);
         if (!eventIds.has(targetEventId)) {
@@ -98,98 +121,156 @@ export default function BulkEventsModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content bulk-events-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Manage {selectedGuests.length} Selected Guest{selectedGuests.length !== 1 ? 's' : ''}</h2>
-          <button className="close-button" onClick={onClose}>x</button>
-        </div>
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: { borderRadius: 3 },
+      }}
+    >
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <EventIcon color="primary" />
+          <Typography variant="h6" fontWeight={600}>
+            Manage {selectedGuests.length} Guest{selectedGuests.length !== 1 ? 's' : ''}
+          </Typography>
+        </Box>
+        <IconButton onClick={onClose} size="small">
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
 
-        <div className="bulk-events-content">
-          <div className="selected-guests-summary">
-            <strong>Selected:</strong>
-            <div className="selected-guest-names">
-              {selectedGuests.slice(0, 5).map(g => (
-                <span key={g.id} className="selected-guest-chip">
-                  {g.firstName} {g.lastName}
-                </span>
-              ))}
-              {selectedGuests.length > 5 && (
-                <span className="more-guests">+{selectedGuests.length - 5} more</span>
-              )}
-            </div>
-          </div>
+      <DialogContent dividers>
+        {isProcessing && <LinearProgress sx={{ mb: 2 }} />}
 
-          <div className="events-section">
-            <h3>Add to Events</h3>
-            <p className="section-description">
-              Click an event to add all selected guests to it. Guests already in an event will be skipped.
-            </p>
-            <div className="event-list">
-              {eventStats.map(({ event, count, total, allIn }) => (
-                <div key={event.id} className="event-row">
-                  <div className="event-info">
-                    <span className="event-name">
-                      {event.name}
-                      {event.id === currentEventId && ' (current)'}
-                    </span>
-                    <span className="event-count">
-                      {count}/{total} guests
-                    </span>
-                  </div>
-                  {event.id !== currentEventId && (
-                    <button
-                      className={`add-to-event-button ${allIn ? 'all-added' : ''}`}
-                      onClick={() => handleAddToEvent(event.id)}
-                      disabled={isProcessing || allIn}
-                    >
-                      {allIn ? 'All Added' : `Add ${total - count}`}
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+        {/* Selected Guests Summary */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1 }}>
+            Selected:
+          </Typography>
+          <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+            {selectedGuests.slice(0, 5).map(g => (
+              <Chip
+                key={g.id}
+                label={`${g.firstName} ${g.lastName}`}
+                size="small"
+                variant="outlined"
+              />
+            ))}
+            {selectedGuests.length > 5 && (
+              <Chip
+                label={`+${selectedGuests.length - 5} more`}
+                size="small"
+                color="primary"
+              />
+            )}
+          </Stack>
+        </Box>
 
-          <div className="danger-section">
-            <h3>Remove from {currentEvent?.name || 'Event'}</h3>
-            {!showDeleteConfirm ? (
-              <button
-                className="remove-guests-button"
-                onClick={handleRemoveGuests}
-                disabled={isProcessing}
+        {/* Add to Events Section */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+            Add to Events
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Click an event to add all selected guests. Guests already in an event will be skipped.
+          </Typography>
+          <Stack spacing={1}>
+            {eventStats.map(({ event, count, total, allIn }) => (
+              <Paper
+                key={event.id}
+                variant="outlined"
+                sx={{
+                  p: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
               >
-                Remove {selectedGuests.length} Guest{selectedGuests.length !== 1 ? 's' : ''}
-              </button>
-            ) : (
-              <div className="delete-confirm">
-                <p>Are you sure you want to remove {selectedGuests.length} guest{selectedGuests.length !== 1 ? 's' : ''} from {currentEvent?.name}?</p>
-                <div className="delete-confirm-buttons">
-                  <button
+                <Box>
+                  <Typography variant="body1" fontWeight={500}>
+                    {event.name}
+                    {event.id === currentEventId && (
+                      <Chip label="current" size="small" sx={{ ml: 1, height: 20 }} />
+                    )}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {count}/{total} guests in this event
+                  </Typography>
+                </Box>
+                {event.id !== currentEventId && (
+                  <Button
+                    variant={allIn ? 'outlined' : 'contained'}
+                    size="small"
+                    startIcon={allIn ? <CheckCircleIcon /> : <AddIcon />}
+                    onClick={() => handleAddToEvent(event.id)}
+                    disabled={isProcessing || allIn}
+                    color={allIn ? 'success' : 'primary'}
+                  >
+                    {allIn ? 'All Added' : `Add ${total - count}`}
+                  </Button>
+                )}
+              </Paper>
+            ))}
+          </Stack>
+        </Box>
+
+        <Divider sx={{ my: 3 }} />
+
+        {/* Remove Section */}
+        <Box>
+          <Typography variant="subtitle2" fontWeight={600} color="error" sx={{ mb: 2 }}>
+            Remove from {currentEvent?.name || 'Event'}
+          </Typography>
+          {!showDeleteConfirm ? (
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={handleRemoveGuests}
+              disabled={isProcessing}
+            >
+              Remove {selectedGuests.length} Guest{selectedGuests.length !== 1 ? 's' : ''}
+            </Button>
+          ) : (
+            <Alert
+              severity="error"
+              sx={{ mb: 2 }}
+              action={
+                <Stack direction="row" spacing={1}>
+                  <Button
+                    color="inherit"
+                    size="small"
                     onClick={() => setShowDeleteConfirm(false)}
                     disabled={isProcessing}
                   >
                     Cancel
-                  </button>
-                  <button
-                    className="confirm-delete-button"
+                  </Button>
+                  <Button
+                    color="inherit"
+                    size="small"
+                    variant="outlined"
                     onClick={handleRemoveGuests}
                     disabled={isProcessing}
                   >
-                    {isProcessing ? 'Removing...' : 'Confirm Remove'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+                    {isProcessing ? <CircularProgress size={16} /> : 'Confirm'}
+                  </Button>
+                </Stack>
+              }
+            >
+              Remove {selectedGuests.length} guest{selectedGuests.length !== 1 ? 's' : ''} from {currentEvent?.name}?
+            </Alert>
+          )}
+        </Box>
+      </DialogContent>
 
-        <div className="form-actions">
-          <button type="button" onClick={onClose} disabled={isProcessing}>
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button onClick={onClose} disabled={isProcessing}>
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

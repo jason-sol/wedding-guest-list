@@ -221,6 +221,20 @@ export async function deleteCategory(name: string): Promise<void> {
   if (!response.ok) throw new Error('Failed to delete category');
 }
 
+export async function renameCategory(oldName: string, newName: string): Promise<CategoryInfo> {
+  const response = await fetch(`${API_BASE}/categories/${encodeURIComponent(oldName)}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ name: newName }),
+  });
+  handleAuthError(response);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || 'Failed to rename category');
+  }
+  return extractData<CategoryInfo>(response);
+}
+
 // ============================================================
 // Event operations
 // ============================================================

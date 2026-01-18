@@ -1,4 +1,39 @@
+/**
+ * User Management Modal using MUI Dialog
+ * Manage users and their event permissions
+ */
+
 import { useState, useEffect, useCallback } from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Box,
+  Typography,
+  IconButton,
+  TextField,
+  Paper,
+  Stack,
+  CircularProgress,
+  Alert,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Select,
+  MenuItem,
+  FormControl,
+  Divider,
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import { Event, PermissionLevel, UserEventPermission } from '../types';
 import {
   fetchUsers,
@@ -9,7 +44,6 @@ import {
   fetchEventPermissions,
   setEventPermission,
 } from '../api';
-import './UserManagement.css';
 
 interface SafeUser {
   id: string;
@@ -30,18 +64,15 @@ export default function UserManagement({ onClose }: UserManagementProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // New user form
   const [showNewUserForm, setShowNewUserForm] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
-  // Edit user
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editPassword, setEditPassword] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Delete confirmation
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -56,7 +87,6 @@ export default function UserManagement({ onClose }: UserManagementProps) {
       setUsers(usersData);
       setEvents(eventsData);
 
-      // Load permissions for each event
       const permMap = new Map<string, Map<string, PermissionLevel>>();
       for (const event of eventsData) {
         try {
@@ -67,7 +97,6 @@ export default function UserManagement({ onClose }: UserManagementProps) {
           });
           permMap.set(event.id, userPermMap);
         } catch {
-          // Event might not have permissions yet
           permMap.set(event.id, new Map());
         }
       }
@@ -147,7 +176,6 @@ export default function UserManagement({ onClose }: UserManagementProps) {
   ) => {
     try {
       await setEventPermission(eventId, userId, permission);
-      // Update local state
       setPermissions(prev => {
         const newMap = new Map(prev);
         const eventMap = new Map(newMap.get(eventId) || new Map());
@@ -169,125 +197,147 @@ export default function UserManagement({ onClose }: UserManagementProps) {
 
   if (loading) {
     return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="modal-content user-management-modal" onClick={e => e.stopPropagation()}>
-          <div className="modal-header">
-            <h2>User Management</h2>
-            <button className="close-button" onClick={onClose}>x</button>
-          </div>
-          <div className="loading-state">Loading...</div>
-        </div>
-      </div>
+      <Dialog open onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <AdminPanelSettingsIcon color="primary" />
+            <Typography variant="h6" fontWeight={600}>User Management</Typography>
+          </Box>
+          <IconButton onClick={onClose} size="small"><CloseIcon /></IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+          <CircularProgress />
+        </DialogContent>
+      </Dialog>
     );
   }
 
   if (error) {
     return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="modal-content user-management-modal" onClick={e => e.stopPropagation()}>
-          <div className="modal-header">
-            <h2>User Management</h2>
-            <button className="close-button" onClick={onClose}>x</button>
-          </div>
-          <div className="error-state">
-            <p>{error}</p>
-            <button onClick={loadData}>Retry</button>
-          </div>
-        </div>
-      </div>
+      <Dialog open onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <AdminPanelSettingsIcon color="primary" />
+            <Typography variant="h6" fontWeight={600}>User Management</Typography>
+          </Box>
+          <IconButton onClick={onClose} size="small"><CloseIcon /></IconButton>
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="error" action={<Button onClick={loadData}>Retry</Button>}>{error}</Alert>
+        </DialogContent>
+      </Dialog>
     );
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content user-management-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>User Management</h2>
-          <button className="close-button" onClick={onClose}>x</button>
-        </div>
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+      PaperProps={{
+        sx: { borderRadius: 3 },
+      }}
+    >
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <AdminPanelSettingsIcon color="primary" />
+          <Typography variant="h6" fontWeight={600}>
+            User Management
+          </Typography>
+        </Box>
+        <IconButton onClick={onClose} size="small">
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
 
-        <div className="user-management-content">
-          {/* Add User Section */}
-          <div className="section">
-            <div className="section-header">
-              <h3>Users</h3>
-              {!showNewUserForm && (
-                <button
-                  className="add-user-button"
-                  onClick={() => setShowNewUserForm(true)}
-                >
-                  + Add User
-                </button>
-              )}
-            </div>
-
-            {showNewUserForm && (
-              <form className="new-user-form" onSubmit={handleCreateUser}>
-                <div className="form-row">
-                  <input
-                    type="text"
-                    placeholder="Username"
-                    value={newUsername}
-                    onChange={e => setNewUsername(e.target.value)}
-                    disabled={isCreating}
-                    autoFocus
-                  />
-                  <input
-                    type="password"
-                    placeholder="Password"
-                    value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)}
-                    disabled={isCreating}
-                  />
-                  <button type="submit" disabled={isCreating}>
-                    {isCreating ? 'Creating...' : 'Create'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowNewUserForm(false);
-                      setNewUsername('');
-                      setNewPassword('');
-                    }}
-                    disabled={isCreating}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
+      <DialogContent dividers sx={{ maxHeight: '70vh' }}>
+        {/* Users Section */}
+        <Box sx={{ mb: 4 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="subtitle1" fontWeight={600}>Users</Typography>
+            {!showNewUserForm && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<PersonAddIcon />}
+                onClick={() => setShowNewUserForm(true)}
+              >
+                Add User
+              </Button>
             )}
+          </Box>
 
-            {/* User List */}
-            <div className="user-list">
-              {nonOwnerUsers.length === 0 ? (
-                <p className="no-users">No users created yet. Click "+ Add User" to create one.</p>
-              ) : (
-                nonOwnerUsers.map(user => (
-                  <div key={user.id} className="user-item">
-                    <div className="user-info">
-                      <span className="username">{user.username}</span>
-                      <span className="user-meta">
-                        Created by {user.createdBy} on{' '}
-                        {new Date(user.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <div className="user-actions">
+          {showNewUserForm && (
+            <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+              <Box component="form" onSubmit={handleCreateUser} sx={{ display: 'flex', gap: 2, alignItems: 'flex-end' }}>
+                <TextField
+                  size="small"
+                  label="Username"
+                  value={newUsername}
+                  onChange={e => setNewUsername(e.target.value)}
+                  disabled={isCreating}
+                  autoFocus
+                />
+                <TextField
+                  size="small"
+                  label="Password"
+                  type="password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  disabled={isCreating}
+                />
+                <Button type="submit" variant="contained" disabled={isCreating}>
+                  {isCreating ? <CircularProgress size={20} /> : 'Create'}
+                </Button>
+                <Button
+                  onClick={() => {
+                    setShowNewUserForm(false);
+                    setNewUsername('');
+                    setNewPassword('');
+                  }}
+                  disabled={isCreating}
+                >
+                  Cancel
+                </Button>
+              </Box>
+            </Paper>
+          )}
+
+          {nonOwnerUsers.length === 0 ? (
+            <Alert severity="info">No users created yet. Click "Add User" to create one.</Alert>
+          ) : (
+            <Stack spacing={1}>
+              {nonOwnerUsers.map(user => (
+                <Paper key={user.id} variant="outlined" sx={{ p: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box>
+                      <Typography fontWeight={600}>{user.username}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Created by {user.createdBy} on {new Date(user.createdAt).toLocaleDateString()}
+                      </Typography>
+                    </Box>
+                    <Stack direction="row" spacing={1}>
                       {editingUserId === user.id ? (
-                        <div className="edit-password-form">
-                          <input
+                        <>
+                          <TextField
+                            size="small"
                             type="password"
                             placeholder="New password"
                             value={editPassword}
                             onChange={e => setEditPassword(e.target.value)}
                             disabled={isUpdating}
                           />
-                          <button
+                          <Button
+                            size="small"
+                            variant="contained"
                             onClick={() => handleUpdatePassword(user.id)}
                             disabled={isUpdating}
                           >
-                            {isUpdating ? 'Saving...' : 'Save'}
-                          </button>
-                          <button
+                            {isUpdating ? <CircularProgress size={16} /> : 'Save'}
+                          </Button>
+                          <Button
+                            size="small"
                             onClick={() => {
                               setEditingUserId(null);
                               setEditPassword('');
@@ -295,97 +345,109 @@ export default function UserManagement({ onClose }: UserManagementProps) {
                             disabled={isUpdating}
                           >
                             Cancel
-                          </button>
-                        </div>
+                          </Button>
+                        </>
                       ) : deletingUserId === user.id ? (
-                        <div className="delete-confirm">
-                          <span>Delete this user?</span>
-                          <button
-                            className="confirm-delete"
+                        <>
+                          <Typography variant="body2" sx={{ alignSelf: 'center' }}>Delete user?</Typography>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="error"
                             onClick={() => handleDeleteUser(user.id)}
                             disabled={isDeleting}
                           >
-                            {isDeleting ? 'Deleting...' : 'Yes, Delete'}
-                          </button>
-                          <button
+                            {isDeleting ? <CircularProgress size={16} /> : 'Yes'}
+                          </Button>
+                          <Button
+                            size="small"
                             onClick={() => setDeletingUserId(null)}
                             disabled={isDeleting}
                           >
-                            Cancel
-                          </button>
-                        </div>
+                            No
+                          </Button>
+                        </>
                       ) : (
                         <>
-                          <button onClick={() => setEditingUserId(user.id)}>
-                            Change Password
-                          </button>
-                          <button
-                            className="delete-button"
+                          <Button
+                            size="small"
+                            startIcon={<EditIcon />}
+                            onClick={() => setEditingUserId(user.id)}
+                          >
+                            Password
+                          </Button>
+                          <Button
+                            size="small"
+                            color="error"
+                            startIcon={<DeleteIcon />}
                             onClick={() => setDeletingUserId(user.id)}
                           >
                             Delete
-                          </button>
+                          </Button>
                         </>
                       )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Permissions Section */}
-          {nonOwnerUsers.length > 0 && events.length > 0 && (
-            <div className="section">
-              <h3>Permissions</h3>
-              <p className="section-description">
-                Set each user's access level for each event. "Admin" can edit, "Viewer" is read-only, "None" blocks access.
-              </p>
-              <div className="permissions-table-container">
-                <table className="permissions-table">
-                  <thead>
-                    <tr>
-                      <th>User</th>
-                      {events.map(event => (
-                        <th key={event.id}>{event.name}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {nonOwnerUsers.map(user => (
-                      <tr key={user.id}>
-                        <td className="user-cell">{user.username}</td>
-                        {events.map(event => (
-                          <td key={event.id} className="permission-cell">
-                            <select
-                              value={getPermission(event.id, user.id)}
-                              onChange={e =>
-                                handlePermissionChange(
-                                  event.id,
-                                  user.id,
-                                  e.target.value as PermissionLevel
-                                )
-                              }
-                            >
-                              <option value="admin">Admin</option>
-                              <option value="viewer">Viewer</option>
-                              <option value="none">None</option>
-                            </select>
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                    </Stack>
+                  </Box>
+                </Paper>
+              ))}
+            </Stack>
           )}
-        </div>
+        </Box>
 
-        <div className="modal-footer">
-          <button onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </div>
+        {/* Permissions Section */}
+        {nonOwnerUsers.length > 0 && events.length > 0 && (
+          <>
+            <Divider sx={{ my: 3 }} />
+            <Box>
+              <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
+                Permissions
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Set each user's access level for each event. "Admin" can edit, "Viewer" is read-only, "None" blocks access.
+              </Typography>
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 600 }}>User</TableCell>
+                      {events.map(event => (
+                        <TableCell key={event.id} sx={{ fontWeight: 600 }}>{event.name}</TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {nonOwnerUsers.map(user => (
+                      <TableRow key={user.id}>
+                        <TableCell>{user.username}</TableCell>
+                        {events.map(event => (
+                          <TableCell key={event.id}>
+                            <FormControl size="small" fullWidth>
+                              <Select
+                                value={getPermission(event.id, user.id)}
+                                onChange={e =>
+                                  handlePermissionChange(event.id, user.id, e.target.value as PermissionLevel)
+                                }
+                              >
+                                <MenuItem value="admin">Admin</MenuItem>
+                                <MenuItem value="viewer">Viewer</MenuItem>
+                                <MenuItem value="none">None</MenuItem>
+                              </Select>
+                            </FormControl>
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          </>
+        )}
+      </DialogContent>
+
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
+    </Dialog>
   );
 }

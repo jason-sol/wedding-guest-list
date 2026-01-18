@@ -1,8 +1,31 @@
+/**
+ * Edit Guest Form using MUI Dialog
+ * Edit, delete, or manage event assignments for an existing guest
+ */
+
 import { useState, useEffect } from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Button,
+  Box,
+  Typography,
+  IconButton,
+  FormGroup,
+  FormControlLabel,
+  Checkbox,
+  Divider,
+  CircularProgress,
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { Guest, Category, CategoryInfo, Event, PermissionLevel } from '../types';
 import { updateGuest, deleteGuest, copyGuest, GuestPresenceInfo } from '../api';
 import CategoryDropdown from './CategoryDropdown';
-import './GuestForm.css';
 
 interface EventWithPermission extends Event {
   permission: PermissionLevel;
@@ -32,15 +55,12 @@ export default function EditGuestForm({
   const [selectedTags, setSelectedTags] = useState<Category[]>(guest.tags || []);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Get IDs of events the guest is already in (not including current event)
   const alreadyInEventIds = new Set(guestPresence.map(e => e.id));
 
-  // Get other events where user has admin access
   const otherAdminEvents = events.filter(
     e => e.id !== eventId && e.permission === 'admin'
   );
 
-  // Track which events the guest should be in (initialized from existing presence)
   const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(() => {
     return new Set(guestPresence.map(e => e.id));
   });
@@ -61,7 +81,6 @@ export default function EditGuestForm({
     setFirstName(guest.firstName);
     setLastName(guest.lastName);
     setSelectedTags(guest.tags || []);
-    // Reset selected events when guest changes
     setSelectedEventIds(new Set(guestPresence.map(e => e.id)));
   }, [guest, guestPresence]);
 
@@ -81,11 +100,9 @@ export default function EditGuestForm({
         tags: selectedTags,
       });
 
-      // Determine which events to add to and which to remove from
       const eventsToAdd = Array.from(selectedEventIds).filter(id => !alreadyInEventIds.has(id));
       const eventsToRemove = Array.from(alreadyInEventIds).filter(id => !selectedEventIds.has(id));
 
-      // Copy to newly selected events
       for (const targetEventId of eventsToAdd) {
         try {
           await copyGuest(eventId, guest.id, targetEventId);
@@ -94,13 +111,10 @@ export default function EditGuestForm({
         }
       }
 
-      // Remove from unselected events using the guestId in that event
       for (const targetEventId of eventsToRemove) {
         try {
-          // Find the guest's ID in the target event from presence info
           const presenceInfo = guestPresence.find(p => p.id === targetEventId);
           if (presenceInfo) {
-            // Use the guestId from presence info (which is the guest's ID in that specific event)
             await deleteGuest(targetEventId, presenceInfo.guestId);
           }
         } catch (err) {
@@ -135,38 +149,51 @@ export default function EditGuestForm({
     }
   };
 
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Edit Guest</h2>
-          <button className="close-button" onClick={onClose}>×</button>
-        </div>
-        
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="firstName">First Name *</label>
-            <input
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: { borderRadius: 3 },
+      }}
+    >
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <EditIcon color="primary" />
+          <Typography variant="h6" fontWeight={600}>
+            Edit Guest
+          </Typography>
+        </Box>
+        <IconButton onClick={onClose} size="small">
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
+
+      <Box component="form" onSubmit={handleSubmit}>
+        <DialogContent dividers>
+          <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+            <TextField
+              fullWidth
               id="firstName"
-              type="text"
+              label="First Name"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               required
               autoFocus
+              disabled={isSubmitting}
             />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="lastName">Last Name *</label>
-            <input
+            <TextField
+              fullWidth
               id="lastName"
-              type="text"
+              label="Last Name"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               required
+              disabled={isSubmitting}
             />
-          </div>
+          </Box>
 
           <CategoryDropdown
             categories={categories}
@@ -182,44 +209,55 @@ export default function EditGuestForm({
           />
 
           {otherAdminEvents.length > 0 && (
-            <div className="form-group">
-              <label>Event Invitations:</label>
-              <div className="event-checkboxes">
-                {otherAdminEvents.map(event => (
-                  <label key={event.id} className="event-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={selectedEventIds.has(event.id)}
-                      onChange={() => toggleEvent(event.id)}
-                      disabled={isSubmitting}
+            <>
+              <Divider sx={{ my: 3 }} />
+              <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1.5 }}>
+                Event Invitations:
+              </Typography>
+              <FormGroup>
+                {[...otherAdminEvents]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(event => (
+                    <FormControlLabel
+                      key={event.id}
+                      control={
+                        <Checkbox
+                          checked={selectedEventIds.has(event.id)}
+                          onChange={() => toggleEvent(event.id)}
+                          disabled={isSubmitting}
+                        />
+                      }
+                      label={event.name}
                     />
-                    <span>{event.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+                  ))}
+              </FormGroup>
+            </>
           )}
+        </DialogContent>
 
-          <div className="form-actions">
-            <button 
-              type="button" 
-              onClick={handleDelete} 
+        <DialogActions sx={{ px: 3, py: 2, justifyContent: 'space-between' }}>
+          <Button
+            color="error"
+            onClick={handleDelete}
+            disabled={isSubmitting}
+            startIcon={<DeleteIcon />}
+          >
+            Remove Guest
+          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button onClick={onClose} disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
               disabled={isSubmitting}
-              className="delete-guest-button"
             >
-              Remove Guest
-            </button>
-            <div style={{ display: 'flex', gap: '12px', marginLeft: 'auto' }}>
-              <button type="button" onClick={onClose} disabled={isSubmitting}>
-                Cancel
-              </button>
-              <button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
+              {isSubmitting ? <CircularProgress size={20} color="inherit" /> : 'Save Changes'}
+            </Button>
+          </Box>
+        </DialogActions>
+      </Box>
+    </Dialog>
   );
 }

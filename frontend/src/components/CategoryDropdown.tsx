@@ -1,7 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+/**
+ * Category dropdown component using MUI Autocomplete
+ * Searchable dropdown for selecting categories with multi-select support
+ */
+
+import { Autocomplete, TextField, Box, Stack, Typography } from '@mui/material';
 import { Category, CategoryInfo } from '../types';
 import CategoryTag from './CategoryTag';
-import './CategoryDropdown.css';
 
 interface CategoryDropdownProps {
   categories: CategoryInfo[];
@@ -18,76 +22,77 @@ export default function CategoryDropdown({
   onRemove,
   label = 'Categories',
 }: CategoryDropdownProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-        setSearchTerm('');
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const filteredCategories = categories.filter(cat =>
-    cat.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const handleSelect = (category: Category) => {
-    onSelect(category);
-    setSearchTerm('');
-    setIsOpen(false);
-  };
+  // Filter out already selected categories from options and sort alphabetically
+  const availableCategories = categories
+    .filter(cat => !selectedCategories.includes(cat.name))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div className="form-group">
-      <label>{label}</label>
-      <div className="category-dropdown" ref={dropdownRef}>
-        <div
-          className="category-dropdown-trigger"
-          onClick={() => setIsOpen(!isOpen)}
-        >
-          <input
-            type="text"
+    <Box>
+      <Typography
+        variant="body2"
+        fontWeight={500}
+        color="text.secondary"
+        sx={{ mb: 1 }}
+      >
+        {label}
+      </Typography>
+
+      <Autocomplete
+        options={availableCategories}
+        getOptionLabel={(option) => option.name}
+        onChange={(_, newValue) => {
+          if (newValue) {
+            onSelect(newValue.name);
+          }
+        }}
+        value={null}
+        clearOnBlur
+        blurOnSelect
+        renderOption={(props, option) => {
+          const { key, ...otherProps } = props;
+          return (
+            <Box
+              component="li"
+              key={key}
+              {...otherProps}
+              sx={{
+                py: 1,
+                px: 2,
+              }}
+            >
+              <CategoryTag category={option.name} categoryInfo={option} />
+            </Box>
+          );
+        }}
+        renderInput={(params) => (
+          <TextField
+            {...params}
             placeholder="Search or select categories..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setIsOpen(true);
+            size="small"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                bgcolor: 'background.paper',
+              },
             }}
-            onFocus={() => setIsOpen(true)}
           />
-          <span className="dropdown-arrow">{isOpen ? '▲' : '▼'}</span>
-        </div>
-        
-        {isOpen && (
-          <div className="category-dropdown-menu">
-            {filteredCategories.length === 0 ? (
-              <div className="dropdown-empty">No categories found</div>
-            ) : (
-              filteredCategories.map((catInfo) => (
-                <div
-                  key={catInfo.name}
-                  className={`dropdown-item ${
-                    selectedCategories.includes(catInfo.name) ? 'selected' : ''
-                  }`}
-                  onClick={() => handleSelect(catInfo.name)}
-                >
-                  <CategoryTag category={catInfo.name} categoryInfo={catInfo} />
-                </div>
-              ))
-            )}
-          </div>
         )}
-      </div>
-      
+        noOptionsText="No categories found"
+        sx={{
+          '& .MuiAutocomplete-listbox': {
+            maxHeight: 250,
+          },
+        }}
+      />
+
       {selectedCategories.length > 0 && (
-        <div className="selected-tags">
+        <Stack
+          direction="row"
+          spacing={1}
+          flexWrap="wrap"
+          useFlexGap
+          sx={{ mt: 1.5 }}
+        >
           {selectedCategories.map((category) => {
             const catInfo = categories.find(c => c.name === category);
             return (
@@ -100,8 +105,8 @@ export default function CategoryDropdown({
               />
             );
           })}
-        </div>
+        </Stack>
       )}
-    </div>
+    </Box>
   );
 }

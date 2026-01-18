@@ -1,9 +1,39 @@
+/**
+ * Add Family Form using MUI Dialog
+ * Creates a new family with new members and/or existing guests
+ */
+
 import { useState, useEffect, useRef } from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Button,
+  Box,
+  Typography,
+  IconButton,
+  FormGroup,
+  FormControlLabel,
+  Checkbox,
+  Divider,
+  CircularProgress,
+  Stack,
+  Paper,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Chip,
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import GroupAddIcon from '@mui/icons-material/GroupAdd';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { Category, CategoryInfo, Guest, Event, PermissionLevel } from '../types';
 import { addFamily, addGuestToFamily, copyFamily } from '../api';
 import CategoryDropdown from './CategoryDropdown';
-import './FamilyForm.css';
-import './GuestForm.css';
 
 interface EventWithPermission extends Event {
   permission: PermissionLevel;
@@ -40,13 +70,10 @@ export default function FamilyForm({
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Track which members have been manually edited (so we don't overwrite user changes)
   const manuallyEditedMembersRef = useRef<Set<number>>(new Set());
 
-  // Available guests: those not in any family (within this event)
   const availableGuests = guests.filter(g => !g.familyId);
 
-  // Get other events where user has admin access
   const otherAdminEvents = events.filter(
     e => e.id !== eventId && e.permission === 'admin'
   );
@@ -59,12 +86,10 @@ export default function FamilyForm({
     );
   };
 
-  // When family name changes, update all new members' last names (unless manually edited)
   useEffect(() => {
     if (familyName.trim()) {
       setMembers(prevMembers =>
         prevMembers.map((member, index) => {
-          // Only update if this member hasn't been manually edited
           if (!manuallyEditedMembersRef.current.has(index)) {
             return { ...member, lastName: familyName.trim() };
           }
@@ -82,7 +107,6 @@ export default function FamilyForm({
       return;
     }
 
-    // Include members that have at least some data entered (not completely empty rows)
     const membersToAdd = members.filter(
       (m) => m.firstName.trim() || m.lastName.trim()
     );
@@ -94,7 +118,6 @@ export default function FamilyForm({
 
     setIsSubmitting(true);
     try {
-      // Create family with new members (if any)
       const newFamily = await addFamily(eventId, {
         name: familyName.trim(),
         members: membersToAdd.map((m) => ({
@@ -104,12 +127,10 @@ export default function FamilyForm({
         })),
       });
 
-      // Add existing guests to the family
       for (const guestId of selectedExistingGuests) {
         await addGuestToFamily(eventId, newFamily.id, guestId);
       }
 
-      // Copy family to selected other events
       for (const targetEventId of selectedEvents) {
         try {
           await copyFamily(eventId, newFamily.id, targetEventId);
@@ -128,13 +149,11 @@ export default function FamilyForm({
   };
 
   const addMember = () => {
-    // New member gets the family name as last name by default
     setMembers([...members, { firstName: '', lastName: familyName.trim() }]);
   };
 
   const removeMember = (index: number) => {
     setMembers(members.filter((_, i) => i !== index));
-    // Clean up manually edited tracking for removed member and adjust indices
     const updated = new Set<number>();
     manuallyEditedMembersRef.current.forEach(i => {
       if (i < index) {
@@ -142,7 +161,6 @@ export default function FamilyForm({
       } else if (i > index) {
         updated.add(i - 1);
       }
-      // i === index is skipped (removed member)
     });
     manuallyEditedMembersRef.current = updated;
   };
@@ -152,7 +170,6 @@ export default function FamilyForm({
     updated[index] = { ...updated[index], [field]: value };
     setMembers(updated);
 
-    // If user manually edits the last name, mark this member as manually edited
     if (field === 'lastName') {
       manuallyEditedMembersRef.current.add(index);
     }
@@ -172,113 +189,140 @@ export default function FamilyForm({
     .map(id => availableGuests.find(g => g.id === id))
     .filter((g): g is Guest => g !== undefined);
 
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Add Family</h2>
-          <button className="close-button" onClick={onClose}>x</button>
-        </div>
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: { borderRadius: 3 },
+      }}
+    >
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <GroupAddIcon color="primary" />
+          <Typography variant="h6" fontWeight={600}>
+            Add Family
+          </Typography>
+        </Box>
+        <IconButton onClick={onClose} size="small">
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
 
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="familyName">Family Name *</label>
-            <input
-              id="familyName"
-              type="text"
-              value={familyName}
-              onChange={(e) => setFamilyName(e.target.value)}
-              required
-              autoFocus
-              placeholder="e.g., Smith Family"
-            />
-          </div>
+      <Box component="form" onSubmit={handleSubmit}>
+        <DialogContent dividers sx={{ maxHeight: '60vh' }}>
+          <TextField
+            fullWidth
+            id="familyName"
+            label="Family Name"
+            value={familyName}
+            onChange={(e) => setFamilyName(e.target.value)}
+            required
+            autoFocus
+            placeholder="e.g., Smith Family"
+            disabled={isSubmitting}
+            sx={{ mb: 3 }}
+          />
 
-          <div className="form-group">
-            <label>Add New Members</label>
+          {/* New Members Section */}
+          <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1.5 }}>
+            Add New Members
+          </Typography>
+          <Stack spacing={1.5} sx={{ mb: 2 }}>
             {members.map((member, index) => (
-              <div key={index} className="member-row">
-                <input
-                  type="text"
+              <Paper
+                key={index}
+                variant="outlined"
+                sx={{ p: 2, display: 'flex', gap: 1.5, alignItems: 'center' }}
+              >
+                <TextField
+                  size="small"
                   placeholder="First name"
                   value={member.firstName}
-                  onChange={(e) =>
-                    updateMember(index, 'firstName', e.target.value)
-                  }
+                  onChange={(e) => updateMember(index, 'firstName', e.target.value)}
+                  sx={{ flex: 1 }}
                 />
-                <input
-                  type="text"
+                <TextField
+                  size="small"
                   placeholder="Last name"
                   value={member.lastName}
-                  onChange={(e) =>
-                    updateMember(index, 'lastName', e.target.value)
-                  }
+                  onChange={(e) => updateMember(index, 'lastName', e.target.value)}
+                  sx={{ flex: 1 }}
                 />
                 {members.length > 1 && (
-                  <button
-                    type="button"
-                    className="remove-member"
+                  <IconButton
+                    size="small"
+                    color="error"
                     onClick={() => removeMember(index)}
                   >
-                    Remove
-                  </button>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
                 )}
-              </div>
+              </Paper>
             ))}
-            <button
-              type="button"
-              className="add-member"
-              onClick={addMember}
-            >
-              + Add New Member
-            </button>
-          </div>
+          </Stack>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={addMember}
+            sx={{ mb: 3 }}
+          >
+            Add New Member
+          </Button>
 
-          <div className="form-group">
-            <label>Add Existing Guests</label>
-            {availableGuests.length === 0 ? (
-              <p className="no-guests-message">No available guests (all guests are already in families)</p>
-            ) : (
-              <>
-                <select
-                  className="guest-select"
+          {/* Existing Guests Section */}
+          <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1.5 }}>
+            Add Existing Guests
+          </Typography>
+          {availableGuests.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              No available guests (all guests are already in families)
+            </Typography>
+          ) : (
+            <Box sx={{ mb: 3 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel id="guest-select-label">Select a guest to add</InputLabel>
+                <Select
+                  labelId="guest-select-label"
                   value=""
+                  label="Select a guest to add"
                   onChange={(e) => {
                     if (e.target.value) {
                       addExistingGuest(e.target.value);
-                      e.target.value = '';
                     }
                   }}
                 >
-                  <option value="">Select a guest to add...</option>
                   {availableGuests
                     .filter(g => !selectedExistingGuests.includes(g.id))
+                    .sort((a, b) => {
+                      const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
+                      const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
+                      return nameA.localeCompare(nameB);
+                    })
                     .map(guest => (
-                      <option key={guest.id} value={guest.id}>
+                      <MenuItem key={guest.id} value={guest.id}>
                         {guest.firstName} {guest.lastName}
-                      </option>
+                      </MenuItem>
                     ))}
-                </select>
-                {selectedExistingGuestsList.length > 0 && (
-                  <div className="selected-guests-list">
-                    {selectedExistingGuestsList.map(guest => (
-                      <div key={guest.id} className="selected-guest-item">
-                        <span>{guest.firstName} {guest.lastName}</span>
-                        <button
-                          type="button"
-                          className="remove-guest-button"
-                          onClick={() => removeExistingGuest(guest.id)}
-                        >
-                          x
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+                </Select>
+              </FormControl>
+              {selectedExistingGuestsList.length > 0 && (
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1.5 }}>
+                  {selectedExistingGuestsList.map(guest => (
+                    <Chip
+                      key={guest.id}
+                      label={`${guest.firstName} ${guest.lastName}`}
+                      onDelete={() => removeExistingGuest(guest.id)}
+                      size="small"
+                    />
+                  ))}
+                </Stack>
+              )}
+            </Box>
+          )}
 
           <CategoryDropdown
             categories={categories}
@@ -295,34 +339,45 @@ export default function FamilyForm({
           />
 
           {otherAdminEvents.length > 0 && (
-            <div className="form-group">
-              <label>Also add to other events:</label>
-              <div className="event-checkboxes">
-                {otherAdminEvents.map(event => (
-                  <label key={event.id} className="event-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={selectedEvents.includes(event.id)}
-                      onChange={() => toggleEvent(event.id)}
-                      disabled={isSubmitting}
+            <>
+              <Divider sx={{ my: 3 }} />
+              <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1.5 }}>
+                Also add to other events:
+              </Typography>
+              <FormGroup>
+                {[...otherAdminEvents]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(event => (
+                    <FormControlLabel
+                      key={event.id}
+                      control={
+                        <Checkbox
+                          checked={selectedEvents.includes(event.id)}
+                          onChange={() => toggleEvent(event.id)}
+                          disabled={isSubmitting}
+                        />
+                      }
+                      label={event.name}
                     />
-                    <span>{event.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+                  ))}
+              </FormGroup>
+            </>
           )}
+        </DialogContent>
 
-          <div className="form-actions">
-            <button type="button" onClick={onClose} disabled={isSubmitting}>
-              Cancel
-            </button>
-            <button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Adding...' : 'Add Family'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={onClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? <CircularProgress size={20} color="inherit" /> : 'Add Family'}
+          </Button>
+        </DialogActions>
+      </Box>
+    </Dialog>
   );
 }
