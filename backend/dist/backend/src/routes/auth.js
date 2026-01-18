@@ -1,74 +1,155 @@
 "use strict";
+/**
+ * Authentication routes.
+ * Supports dual auth: owner via env vars, other users via bcrypt-hashed passwords.
+ */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sessions = void 0;
 const express_1 = __importDefault(require("express"));
 const crypto_1 = __importDefault(require("crypto"));
+const bcrypt_1 = __importDefault(require("bcrypt"));
+const config_1 = require("../config");
+const sessionStore_1 = require("../sessionStore");
+const store_1 = require("../store");
+const validation_1 = require("../validation");
+const apiResponse_1 = require("../apiResponse");
 const router = express_1.default.Router();
-// In-memory session store (in production, use Redis or database)
-// Export it so middleware can access it
-exports.sessions = new Map();
-// Default credentials (should be in environment variables in production)
-const DEFAULT_USERNAME = process.env.AUTH_USERNAME || 'jason';
-const DEFAULT_PASSWORD = process.env.AUTH_PASSWORD || 'jason';
-// Session expiration time (24 hours)
-const SESSION_DURATION = 24 * 60 * 60 * 1000;
-// Clean up expired sessions periodically
-setInterval(() => {
-    const now = Date.now();
-    for (const [token, session] of exports.sessions.entries()) {
-        if (session.expiresAt < now) {
-            exports.sessions.delete(token);
-        }
-    }
-}, 60 * 60 * 1000); // Run every hour
-// POST /api/auth/login
-router.post('/login', (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
-        return res.status(400).json({ error: 'Username and password are required' });
-    }
-    // Validate credentials
-    if (username === DEFAULT_USERNAME && password === DEFAULT_PASSWORD) {
-        // Generate a secure token
-        const token = crypto_1.default.randomBytes(32).toString('hex');
-        const expiresAt = Date.now() + SESSION_DURATION;
-        exports.sessions.set(token, { username, expiresAt });
-        return res.json({
-            token,
+const config = (0, config_1.getConfig)();
+/**
+ * Validates owner credentials from environment variables.
+ * Uses constant-time comparison to prevent timing attacks.
+ */
+function isOwnerCredentials(username, password) {
+    const ownerCreds = config.auth.credentials[0]; // Owner is always first credential
+    if (!ownerCreds)
+        return false;
+    // Use constant-time comparison to prevent timing attacks
+    const usernameMatch = crypto_1.default.timingSafeEqual(Buffer.from(username.padEnd(256)), Buffer.from(ownerCreds.username.padEnd(256)));
+    const passwordMatch = crypto_1.default.timingSafeEqual(Buffer.from(password.padEnd(256)), Buffer.from(ownerCreds.password.padEnd(256)));
+    return usernameMatch && passwordMatch;
+}
+/**
+ * Get or create owner user record.
+ * Owner user is created on first login and uses env vars for auth.
+ */
+function getOrCreateOwnerUser(username) {
+    let ownerUser = store_1.store.getUserByUsername(username);
+    if (!ownerUser) {
+        // Create owner user record (passwordHash is empty - uses env vars)
+        ownerUser = store_1.store.addUser({
             username,
-            expiresAt
+            passwordHash: '', // Owner uses env vars, not stored password
+            isOwner: true,
+            createdAt: Date.now(),
+            createdBy: 'system',
+        });
+        console.log(`Created owner user record: ${username}`);
+    }
+    else if (!ownerUser.isOwner) {
+        // User exists but isn't marked as owner - update it
+        store_1.store.updateUser(ownerUser.id, { isOwner: true });
+        ownerUser.isOwner = true;
+    }
+    return {
+        id: ownerUser.id,
+        username: ownerUser.username,
+        isOwner: true,
+    };
+}
+// POST /api/auth/login
+router.post('/login', async (req, res) => {
+    const validation = (0, validation_1.validate)(validation_1.LoginSchema, req.body);
+    if (!validation.success) {
+        return (0, apiResponse_1.sendValidationError)(res, validation.error, validation.details);
+    }
+    const { username, password } = validation.data;
+    // First, check if this is the owner logging in (env var credentials)
+    if (isOwnerCredentials(username, password)) {
+        const ownerUser = getOrCreateOwnerUser(username);
+        // Generate session
+        const token = crypto_1.default.randomBytes(32).toString('hex');
+        const now = Date.now();
+        const expiresAt = now + config.auth.sessionDurationMs;
+        const sessionStore = (0, sessionStore_1.getSessionStore)();
+        sessionStore.set(token, {
+            userId: ownerUser.id,
+            username: ownerUser.username,
+            isOwner: true,
+            expiresAt,
+            createdAt: now,
+        });
+        return (0, apiResponse_1.sendSuccess)(res, {
+            token,
+            userId: ownerUser.id,
+            username: ownerUser.username,
+            isOwner: true,
+            expiresAt,
         });
     }
-    res.status(401).json({ error: 'Invalid username or password' });
+    // Not owner - check regular users
+    const user = store_1.store.getUserByUsername(username);
+    if (!user) {
+        return (0, apiResponse_1.sendUnauthorized)(res, 'Invalid username or password');
+    }
+    // Owner users must use env var credentials, not stored password
+    if (user.isOwner) {
+        return (0, apiResponse_1.sendUnauthorized)(res, 'Invalid username or password');
+    }
+    // Verify password with bcrypt
+    const passwordValid = await bcrypt_1.default.compare(password, user.passwordHash);
+    if (!passwordValid) {
+        return (0, apiResponse_1.sendUnauthorized)(res, 'Invalid username or password');
+    }
+    // Generate session
+    const token = crypto_1.default.randomBytes(32).toString('hex');
+    const now = Date.now();
+    const expiresAt = now + config.auth.sessionDurationMs;
+    const sessionStore = (0, sessionStore_1.getSessionStore)();
+    sessionStore.set(token, {
+        userId: user.id,
+        username: user.username,
+        isOwner: false,
+        expiresAt,
+        createdAt: now,
+    });
+    return (0, apiResponse_1.sendSuccess)(res, {
+        token,
+        userId: user.id,
+        username: user.username,
+        isOwner: false,
+        expiresAt,
+    });
 });
 // POST /api/auth/logout
 router.post('/logout', (req, res) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.substring(7);
-        exports.sessions.delete(token);
+        const sessionStore = (0, sessionStore_1.getSessionStore)();
+        sessionStore.delete(token);
     }
-    res.json({ message: 'Logged out successfully' });
+    (0, apiResponse_1.sendSuccess)(res, { message: 'Logged out successfully' });
 });
 // GET /api/auth/check
 router.get('/check', (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ authenticated: false });
+        return (0, apiResponse_1.sendUnauthorized)(res, 'Not authenticated');
     }
     const token = authHeader.substring(7);
-    const session = exports.sessions.get(token);
+    const sessionStore = (0, sessionStore_1.getSessionStore)();
+    const session = sessionStore.get(token);
     if (!session) {
-        return res.status(401).json({ authenticated: false });
+        return (0, apiResponse_1.sendUnauthorized)(res, 'Invalid or expired session');
     }
-    // Check if session expired
-    if (session.expiresAt < Date.now()) {
-        exports.sessions.delete(token);
-        return res.status(401).json({ authenticated: false });
-    }
-    res.json({ authenticated: true, username: session.username });
+    // Session expiry is handled by sessionStore.get()
+    (0, apiResponse_1.sendSuccess)(res, {
+        authenticated: true,
+        userId: session.userId,
+        username: session.username,
+        isOwner: session.isOwner,
+    });
 });
 exports.default = router;

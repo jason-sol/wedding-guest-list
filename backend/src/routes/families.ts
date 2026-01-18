@@ -1,56 +1,104 @@
+/**
+ * Event-scoped family routes.
+ * All routes are prefixed with /api/events/:eventId/families
+ * Read operations require viewer+ permission.
+ * Write operations require admin+ permission.
+ */
+
 import { Router, Request, Response } from 'express';
 import { store } from '../store';
-import { Family, Guest } from '../../../shared/types/index';
+import { Family } from '../../../shared/types/index';
 import { capitalizeWords } from '../../../shared/utils/capitalize';
+import {
+  validate,
+  CreateFamilySchema,
+  UpdateFamilySchema,
+  ReorderMembersSchema,
+  AddGuestToFamilySchema,
+  CopyFamilySchema,
+} from '../validation';
+import {
+  sendSuccess,
+  sendCreated,
+  sendNoContent,
+  sendNotFound,
+  sendValidationError,
+  sendError,
+} from '../apiResponse';
+import { requireEventViewer, requireEventAdmin } from '../middleware/permissions';
 
-const router = Router();
+// Router with mergeParams to access :eventId from parent
+const router = Router({ mergeParams: true });
 
-// GET /api/families - Get all families
-router.get('/', (req: Request, res: Response) => {
-  const families = store.getAllFamilies();
-  res.json(families);
+// GET /api/events/:eventId/families - Get all families for an event (viewer+)
+router.get('/', requireEventViewer, (req: Request, res: Response) => {
+  const eventId = req.params.eventId;
+  const families = store.getFamiliesForEvent(eventId);
+  sendSuccess(res, families);
 });
 
-// GET /api/families/:id - Get a specific family
-router.get('/:id', (req: Request, res: Response) => {
+// GET /api/events/:eventId/families/:id - Get a specific family (viewer+)
+router.get('/:id', requireEventViewer, (req: Request, res: Response) => {
   const family = store.getFamily(req.params.id);
+
   if (!family) {
-    return res.status(404).json({ error: 'Family not found' });
+    return sendNotFound(res, 'Family');
   }
-  res.json(family);
+
+  // Verify family belongs to this event
+  if (family.eventId !== req.params.eventId) {
+    return sendNotFound(res, 'Family');
+  }
+
+  sendSuccess(res, family);
 });
 
-// POST /api/families - Create a new family with members
-router.post('/', (req: Request, res: Response) => {
-  const { name, members } = req.body;
+// POST /api/events/:eventId/families - Create a new family with members (admin+)
+router.post('/', requireEventAdmin, (req: Request, res: Response) => {
+  const eventId = req.params.eventId;
 
-  if (!name) {
-    return res.status(400).json({ error: 'Family name is required' });
+  // Verify event exists
+  const event = store.getEvent(eventId);
+  if (!event) {
+    return sendNotFound(res, 'Event');
   }
+
+  const validation = validate(CreateFamilySchema, req.body);
+
+  if (!validation.success) {
+    return sendValidationError(res, validation.error, validation.details);
+  }
+
+  const { name, members } = validation.data;
 
   // If members are provided as guest data, create guests first
   const memberIds: string[] = [];
   if (Array.isArray(members)) {
     for (const member of members) {
-      if (typeof member === 'object' && member.firstName && member.lastName) {
+      if (typeof member === 'object' && ('firstName' in member || 'lastName' in member)) {
         // Create guest and add to family (capitalize names)
         const guest = store.addGuest({
-          firstName: capitalizeWords(member.firstName.trim()),
-          lastName: capitalizeWords(member.lastName.trim()),
+          eventId,
+          firstName: capitalizeWords((member.firstName || '').trim()),
+          lastName: capitalizeWords((member.lastName || '').trim()),
           familyId: null, // Will be set after family is created
           tags: member.tags || [],
-          reception: member.reception === true || member.reception === 'true',
+          rsvp: undefined,
         });
         memberIds.push(guest.id);
       } else if (typeof member === 'string') {
-        // Assume it's an existing guest ID
-        memberIds.push(member);
+        // Assume it's an existing guest ID - verify it belongs to this event
+        const existingGuest = store.getGuest(member);
+        if (existingGuest && existingGuest.eventId === eventId) {
+          memberIds.push(member);
+        }
       }
     }
   }
 
   const family = store.addFamily({
-    name: capitalizeWords(name.trim()),
+    eventId,
+    name: capitalizeWords(name),
     members: memberIds,
   });
 
@@ -59,71 +107,121 @@ router.post('/', (req: Request, res: Response) => {
     store.updateGuest(guestId, { familyId: family.id });
   });
 
-  res.status(201).json(family);
+  sendCreated(res, family);
 });
 
-// PUT /api/families/:id - Update a family
-router.put('/:id', (req: Request, res: Response) => {
-  const { name, members } = req.body;
-  
+// PUT /api/events/:eventId/families/:id - Update a family (admin+)
+router.put('/:id', requireEventAdmin, (req: Request, res: Response) => {
+  const eventId = req.params.eventId;
+  const family = store.getFamily(req.params.id);
+
+  if (!family) {
+    return sendNotFound(res, 'Family');
+  }
+
+  // Verify family belongs to this event
+  if (family.eventId !== eventId) {
+    return sendNotFound(res, 'Family');
+  }
+
+  const validation = validate(UpdateFamilySchema, req.body);
+
+  if (!validation.success) {
+    return sendValidationError(res, validation.error, validation.details);
+  }
+
+  const { name, members } = validation.data;
+
   const updates: Partial<Family> = {};
-  if (name !== undefined) updates.name = capitalizeWords(name.trim());
-  if (members !== undefined) updates.members = members;
+  if (name !== undefined) updates.name = capitalizeWords(name);
+  if (members !== undefined) {
+    // Verify all member IDs belong to this event
+    for (const memberId of members) {
+      const guest = store.getGuest(memberId);
+      if (!guest || guest.eventId !== eventId) {
+        return sendError(res, `Guest ${memberId} not found or does not belong to this event`, 400);
+      }
+    }
+    updates.members = members;
+  }
 
   const updated = store.updateFamily(req.params.id, updates);
-  
+
   if (!updated) {
-    return res.status(404).json({ error: 'Family not found' });
+    return sendNotFound(res, 'Family');
   }
 
-  res.json(updated);
+  sendSuccess(res, updated);
 });
 
-// PUT /api/families/:id/members/reorder - Reorder family members
-router.put('/:id/members/reorder', (req: Request, res: Response) => {
-  const { memberIds } = req.body;
-  
-  if (!Array.isArray(memberIds)) {
-    return res.status(400).json({ error: 'memberIds must be an array' });
+// PUT /api/events/:eventId/families/:id/members/reorder - Reorder family members (admin+)
+router.put('/:id/members/reorder', requireEventAdmin, (req: Request, res: Response) => {
+  const eventId = req.params.eventId;
+  const family = store.getFamily(req.params.id);
+
+  if (!family) {
+    return sendNotFound(res, 'Family');
   }
 
-  const family = store.getFamily(req.params.id);
-  if (!family) {
-    return res.status(404).json({ error: 'Family not found' });
+  // Verify family belongs to this event
+  if (family.eventId !== eventId) {
+    return sendNotFound(res, 'Family');
   }
+
+  const validation = validate(ReorderMembersSchema, req.body);
+
+  if (!validation.success) {
+    return sendValidationError(res, validation.error, validation.details);
+  }
+
+  const { memberIds } = validation.data;
 
   // Validate all member IDs exist in the family
   const invalidIds = memberIds.filter(id => !family.members.includes(id));
   if (invalidIds.length > 0) {
-    return res.status(400).json({ error: `Invalid member IDs: ${invalidIds.join(', ')}` });
+    return sendValidationError(res, `Invalid member IDs: ${invalidIds.join(', ')}`);
   }
 
   // Update family with new member order
   const updated = store.updateFamily(req.params.id, { members: memberIds });
-  
+
   if (!updated) {
-    return res.status(404).json({ error: 'Family not found' });
+    return sendNotFound(res, 'Family');
   }
 
-  res.json(updated);
+  sendSuccess(res, updated);
 });
 
-// POST /api/families/:id/members - Add a guest to a family
-router.post('/:id/members', (req: Request, res: Response) => {
-  const { guestId } = req.body;
-  
-  if (!guestId) {
-    return res.status(400).json({ error: 'guestId is required' });
+// POST /api/events/:eventId/families/:id/members - Add a guest to a family (admin+)
+router.post('/:id/members', requireEventAdmin, (req: Request, res: Response) => {
+  const eventId = req.params.eventId;
+  const family = store.getFamily(req.params.id);
+
+  if (!family) {
+    return sendNotFound(res, 'Family');
   }
 
-  const family = store.getFamily(req.params.id);
-  if (!family) {
-    return res.status(404).json({ error: 'Family not found' });
+  // Verify family belongs to this event
+  if (family.eventId !== eventId) {
+    return sendNotFound(res, 'Family');
   }
+
+  const validation = validate(AddGuestToFamilySchema, req.body);
+
+  if (!validation.success) {
+    return sendValidationError(res, validation.error, validation.details);
+  }
+
+  const { guestId } = validation.data;
 
   const guest = store.getGuest(guestId);
   if (!guest) {
-    return res.status(404).json({ error: 'Guest not found' });
+    return sendNotFound(res, 'Guest');
+  }
+
+  // Verify guest belongs to this event
+  if (guest.eventId !== eventId) {
+    return sendError(res, 'Guest does not belong to this event', 400);
   }
 
   // Add guest to family members if not already present
@@ -137,44 +235,112 @@ router.post('/:id/members', (req: Request, res: Response) => {
   store.updateGuest(guestId, { familyId: family.id });
 
   const updatedFamily = store.getFamily(family.id);
-  res.json(updatedFamily);
+  sendSuccess(res, updatedFamily);
 });
 
-// DELETE /api/families/:id/members/:guestId - Remove a guest from a family
-router.delete('/:id/members/:guestId', (req: Request, res: Response) => {
+// DELETE /api/events/:eventId/families/:id/members/:guestId - Remove a guest from a family (admin+)
+router.delete('/:id/members/:guestId', requireEventAdmin, (req: Request, res: Response) => {
+  const eventId = req.params.eventId;
   const family = store.getFamily(req.params.id);
+
   if (!family) {
-    return res.status(404).json({ error: 'Family not found' });
+    return sendNotFound(res, 'Family');
+  }
+
+  // Verify family belongs to this event
+  if (family.eventId !== eventId) {
+    return sendNotFound(res, 'Family');
   }
 
   const guestId = req.params.guestId;
+  const guest = store.getGuest(guestId);
+
+  // Verify guest belongs to this event
+  if (guest && guest.eventId !== eventId) {
+    return sendError(res, 'Guest does not belong to this event', 400);
+  }
+
   const updatedMembers = family.members.filter(id => id !== guestId);
-  
+
   store.updateFamily(family.id, { members: updatedMembers });
-  store.updateGuest(guestId, { familyId: null });
+  if (guest) {
+    store.updateGuest(guestId, { familyId: null });
+  }
 
   const updatedFamily = store.getFamily(family.id);
-  res.json(updatedFamily);
+  sendSuccess(res, updatedFamily);
 });
 
-// DELETE /api/families/:id - Delete a family
-router.delete('/:id', (req: Request, res: Response) => {
+// POST /api/events/:eventId/families/:id/copy - Copy a family to another event (admin+ on target)
+router.post('/:id/copy', requireEventViewer, (req: Request, res: Response) => {
+  const sourceEventId = req.params.eventId;
+  const familyId = req.params.id;
+
+  const validation = validate(CopyFamilySchema, req.body);
+
+  if (!validation.success) {
+    return sendValidationError(res, validation.error, validation.details);
+  }
+
+  const { targetEventId } = validation.data;
+
+  // Verify source family exists and belongs to source event
+  const sourceFamily = store.getFamily(familyId);
+  if (!sourceFamily || sourceFamily.eventId !== sourceEventId) {
+    return sendNotFound(res, 'Family');
+  }
+
+  // Verify target event exists
+  const targetEvent = store.getEvent(targetEventId);
+  if (!targetEvent) {
+    return sendError(res, 'Target event not found', 400);
+  }
+
+  // Check permission on target event (need admin to add families there)
+  if (!req.user?.isOwner) {
+    const targetPermission = store.getPermission(req.user!.userId, targetEventId);
+    if (targetPermission !== 'admin') {
+      return sendError(res, 'You need admin permission on the target event to copy families there', 403);
+    }
+  }
+
+  const result = store.copyFamilyToEvent(familyId, targetEventId);
+
+  if (!result) {
+    return sendError(res, 'Failed to copy family', 500);
+  }
+
+  sendCreated(res, result);
+});
+
+// DELETE /api/events/:eventId/families/:id - Delete a family (admin+)
+router.delete('/:id', requireEventAdmin, (req: Request, res: Response) => {
+  const eventId = req.params.eventId;
   const family = store.getFamily(req.params.id);
+
   if (!family) {
-    return res.status(404).json({ error: 'Family not found' });
+    return sendNotFound(res, 'Family');
+  }
+
+  // Verify family belongs to this event
+  if (family.eventId !== eventId) {
+    return sendNotFound(res, 'Family');
   }
 
   // Remove family reference from all members
   family.members.forEach(guestId => {
-    store.updateGuest(guestId, { familyId: null });
+    const guest = store.getGuest(guestId);
+    if (guest && guest.eventId === eventId) {
+      store.updateGuest(guestId, { familyId: null });
+    }
   });
 
   const deleted = store.deleteFamily(req.params.id);
   if (!deleted) {
-    return res.status(404).json({ error: 'Family not found' });
+    return sendNotFound(res, 'Family');
   }
 
-  res.status(204).send();
+  sendNoContent(res);
 });
 
 export default router;

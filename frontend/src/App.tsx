@@ -1,49 +1,51 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Guest, Family, CategoryInfo } from './types';
-import { fetchGuests, fetchFamilies, fetchCategories, checkAuth, logout, exportData, importData } from './api';
+import { fetchGuests, fetchFamilies, fetchCategories, fetchGuestPresence, exportData, importData, createEvent, GuestPresenceMap } from './api';
+import { useFilteredGuests } from './hooks/useFilteredGuests';
+import { useToast } from './components/Toast';
+import { useAuth } from './contexts/AuthContext';
+import { useEvents } from './contexts/EventContext';
 import GuestList from './components/GuestList';
 import GuestForm from './components/GuestForm';
 import FamilyForm from './components/FamilyForm';
 import AddCategoryModal from './components/AddCategoryModal';
+import UserManagement from './components/UserManagement';
+import EventSettings from './components/EventSettings';
 import Login from './components/Login';
 import CategoryTag from './components/CategoryTag';
 import ScrollToTop from './components/ScrollToTop';
 import './App.css';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const { isAuthenticated, user, logout, login } = useAuth();
+  const { events, currentEvent, setCurrentEvent, refreshEvents, canEdit, isBlocked, loading: eventsLoading } = useEvents();
+
   const [guests, setGuests] = useState<Guest[]>([]);
   const [families, setFamilies] = useState<Family[]>([]);
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
+  const [guestPresence, setGuestPresence] = useState<GuestPresenceMap>({});
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'ceremony' | 'reception'>('ceremony');
   const [showGuestForm, setShowGuestForm] = useState(false);
   const [showFamilyForm, setShowFamilyForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [showAddEventForm, setShowAddEventForm] = useState(false);
+  const [newEventName, setNewEventName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+  const [showUserManagement, setShowUserManagement] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<string | null>(null);
   const scrollPositionRef = useRef<number | null>(null);
   const shouldRestoreScrollRef = useRef(false);
 
-  useEffect(() => {
-    // Check authentication on mount
-    const verifyAuth = async () => {
-      const authenticated = await checkAuth();
-      setIsAuthenticated(authenticated);
-      if (authenticated) {
-        loadData();
-      } else {
-        setLoading(false);
-      }
-    };
-    verifyAuth();
-  }, []);
+  const { showSuccess, showError } = useToast();
 
   // Restore scroll position after data updates
   useEffect(() => {
     if (shouldRestoreScrollRef.current && scrollPositionRef.current !== null && !loading) {
-      // Use setTimeout to ensure DOM has fully updated after state changes
       const timeoutId = setTimeout(() => {
         if (scrollPositionRef.current !== null) {
           window.scrollTo(0, scrollPositionRef.current);
@@ -51,66 +53,89 @@ function App() {
           shouldRestoreScrollRef.current = false;
         }
       }, 0);
-      
       return () => clearTimeout(timeoutId);
     }
   }, [guests, families, loading]);
 
-  const loadData = async (preserveScroll = false) => {
-    // Save scroll position if we want to preserve it
+  const loadData = useCallback(async (preserveScroll = false) => {
+    if (!currentEvent) {
+      setGuests([]);
+      setFamilies([]);
+      setGuestPresence({});
+      setLoading(false);
+      return;
+    }
+
     if (preserveScroll) {
-      scrollPositionRef.current = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
+      scrollPositionRef.current = window.scrollY;
       shouldRestoreScrollRef.current = true;
     }
-    
+
     setLoading(true);
     setError(null);
     try {
-      const [guestsData, familiesData, categoriesData] = await Promise.all([
-        fetchGuests(),
-        fetchFamilies(),
+      const [guestsData, familiesData, categoriesData, presenceData] = await Promise.all([
+        fetchGuests(currentEvent.id),
+        fetchFamilies(currentEvent.id),
         fetchCategories(),
+        fetchGuestPresence(currentEvent.id),
       ]);
-      // Ensure we always set arrays, even if API returns something unexpected
       setGuests(Array.isArray(guestsData) ? guestsData : []);
       setFamilies(Array.isArray(familiesData) ? familiesData : []);
       setCategories(Array.isArray(categoriesData) ? categoriesData : []);
-    } catch (error) {
-      console.error('Failed to load data:', error);
-      // Set empty arrays on error to prevent crashes
+      setGuestPresence(presenceData || {});
+    } catch (err) {
+      console.error('Failed to load data:', err);
       setGuests([]);
       setFamilies([]);
       setCategories([]);
-      setError(error instanceof Error ? error.message : 'Failed to load data. Make sure the backend server is running on http://localhost:5000');
+      setGuestPresence({});
+      setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentEvent]);
+
+  // Load event data when current event changes
+  useEffect(() => {
+    if (isAuthenticated && currentEvent) {
+      loadData();
+    }
+  }, [isAuthenticated, currentEvent, loadData]);
+
+  // Load categories when authenticated (global, not event-scoped)
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchCategories().then(setCategories).catch(console.error);
+    }
+  }, [isAuthenticated]);
 
   const handleGuestAdded = () => {
     setShowGuestForm(false);
     loadData(true);
+    showSuccess('Guest added successfully');
   };
 
   const handleFamilyAdded = () => {
     setShowFamilyForm(false);
     loadData(true);
+    showSuccess('Family added successfully');
   };
 
-  const handleLoginSuccess = () => {
-    setIsAuthenticated(true);
-    loadData();
+  const handleLoginSuccess = async (username: string, password: string) => {
+    await login(username, password);
+    await refreshEvents();
   };
 
   const handleLogout = async () => {
     await logout();
-    setIsAuthenticated(false);
     setGuests([]);
     setFamilies([]);
     setCategories([]);
   };
 
   const handleExport = async () => {
+    setIsExporting(true);
     try {
       const blob = await exportData();
       const url = window.URL.createObjectURL(blob);
@@ -121,10 +146,12 @@ function App() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      alert('Data exported successfully!');
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert('Failed to export data. Please try again.');
+      showSuccess('Data exported successfully');
+    } catch (err) {
+      console.error('Export failed:', err);
+      showError('Failed to export data. Please try again.');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -133,52 +160,68 @@ function App() {
     if (!file) return;
 
     if (!file.name.endsWith('.json')) {
-      alert('Please select a JSON file');
+      showError('Please select a JSON file');
       return;
     }
 
     const confirmed = window.confirm(
-      'Importing data will replace all current guests, families, and categories. Are you sure you want to continue?'
+      'Importing data will replace all current data including guests, families, categories, users, and events. Are you sure you want to continue?'
     );
 
     if (!confirmed) {
-      e.target.value = ''; // Reset file input
+      e.target.value = '';
       return;
     }
 
+    setIsImporting(true);
     try {
       const result = await importData(file);
-      alert(
-        `Data imported successfully!\n` +
-        `- Guests: ${result.imported.guests}\n` +
-        `- Families: ${result.imported.families}\n` +
-        `- Categories: ${result.imported.categories}`
+      showSuccess(
+        `Data imported: ${result.imported.guests} guests, ${result.imported.families} families, ${result.imported.events} events`
       );
-      // Reload data to show imported content
-      loadData(false);
-      // Reset file input
+      await refreshEvents();
       e.target.value = '';
-    } catch (error) {
-      console.error('Import failed:', error);
-      alert(error instanceof Error ? error.message : 'Failed to import data. Please check the file format.');
-      e.target.value = ''; // Reset file input
+    } catch (err) {
+      console.error('Import failed:', err);
+      showError(err instanceof Error ? err.message : 'Failed to import data');
+      e.target.value = '';
+    } finally {
+      setIsImporting(false);
     }
   };
 
-  // Filter guests by active tab (must be before any conditional returns)
-  const tabFilteredGuests = useMemo(() => {
-    if (activeTab === 'reception') {
-      return guests.filter(guest => guest.reception === true);
+  const handleCreateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEventName.trim()) return;
+
+    setIsCreatingEvent(true);
+    try {
+      await createEvent({ name: newEventName.trim() });
+      await refreshEvents();
+      setNewEventName('');
+      setShowAddEventForm(false);
+      showSuccess('Event created successfully');
+    } catch (err) {
+      console.error('Failed to create event:', err);
+      showError('Failed to create event');
+    } finally {
+      setIsCreatingEvent(false);
     }
-    return guests; // 'ceremony' shows all guests
-  }, [guests, activeTab]);
+  };
+
+  // Use shared filtering hook
+  const filteredGuests = useFilteredGuests({
+    guests,
+    selectedCategories,
+    searchTerm,
+  });
 
   // Show login page if not authenticated
   if (isAuthenticated === false) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
-  if (loading || isAuthenticated === null) {
+  if (isAuthenticated === null || eventsLoading) {
     return (
       <div className="app">
         <header className="app-header">
@@ -207,30 +250,118 @@ function App() {
     );
   }
 
+  // Blocked event view
+  if (isBlocked && currentEvent) {
+    return (
+      <div className="app">
+        <header className="app-header">
+          <h1>Wedding Guest List</h1>
+          <div className="header-right">
+            {user && <span className="username-display">{user.username}</span>}
+            <button onClick={handleLogout} className="logout-button">
+              Logout
+            </button>
+          </div>
+        </header>
+
+        <div className="tabs-container">
+          {events.map((event) => (
+            <button
+              key={event.id}
+              className={`tab-button ${currentEvent?.id === event.id ? 'active' : ''}`}
+              onClick={() => setCurrentEvent(event.id)}
+            >
+              {event.name}
+            </button>
+          ))}
+        </div>
+
+        <div className="blocked-state">
+          <h2>Access Denied</h2>
+          <p>You do not have permission to view this event.</p>
+          <p>Please contact the owner to request access to "{currentEvent.name}".</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <header className="app-header">
         <h1>Wedding Guest List</h1>
-        <button onClick={handleLogout} className="logout-button">
-          Logout
-        </button>
+        <div className="header-right">
+          {user && <span className="username-display">{user.username}{user.isOwner && ' (Owner)'}</span>}
+          <button onClick={handleLogout} className="logout-button">
+            Logout
+          </button>
+        </div>
       </header>
-      
+
       <div className="tabs-container">
-        <button
-          className={`tab-button ${activeTab === 'ceremony' ? 'active' : ''}`}
-          onClick={() => setActiveTab('ceremony')}
-        >
-          Ceremony
-        </button>
-        <button
-          className={`tab-button ${activeTab === 'reception' ? 'active' : ''}`}
-          onClick={() => setActiveTab('reception')}
-        >
-          Reception
-        </button>
+        {events.map((event) => (
+          <button
+            key={event.id}
+            className={`tab-button ${currentEvent?.id === event.id ? 'active' : ''} ${event.permission === 'none' ? 'blocked' : ''}`}
+            onClick={() => setCurrentEvent(event.id)}
+            title={event.permission === 'none' ? 'No access' : event.permission}
+          >
+            {event.name}
+            {event.permission === 'none' && <span className="blocked-indicator">!</span>}
+            {user?.isOwner && currentEvent?.id === event.id && (
+              <span
+                className="event-settings-icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingEvent(event.id);
+                }}
+                title="Event settings"
+              >
+                ⚙
+              </span>
+            )}
+          </button>
+        ))}
+        {user?.isOwner && (
+          <button
+            className="tab-button add-event-button"
+            onClick={() => setShowAddEventForm(true)}
+            title="Add new event"
+          >
+            +
+          </button>
+        )}
       </div>
-      
+
+      {showAddEventForm && (
+        <div className="modal-overlay" onClick={() => setShowAddEventForm(false)}>
+          <div className="modal-content small-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Add New Event</h2>
+            <form onSubmit={handleCreateEvent}>
+              <div className="form-group">
+                <label htmlFor="event-name">Event Name</label>
+                <input
+                  id="event-name"
+                  type="text"
+                  value={newEventName}
+                  onChange={(e) => setNewEventName(e.target.value)}
+                  placeholder="e.g., Ceremony, Reception"
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="form-actions">
+                <button type="button" onClick={() => setShowAddEventForm(false)}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={isCreatingEvent || !newEventName.trim()}>
+                  {isCreatingEvent ? 'Creating...' : 'Create Event'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="app-controls">
         <div className="app-controls-row">
           <div className="category-filter">
@@ -254,9 +385,9 @@ function App() {
                         }
                       }}
                     >
-                      <CategoryTag 
-                        category={cat.name} 
-                        categoryInfo={isSelected ? { name: cat.name, color: '#4CAF50' } : cat} 
+                      <CategoryTag
+                        category={cat.name}
+                        categoryInfo={isSelected ? { name: cat.name, color: '#4CAF50' } : cat}
                       />
                     </button>
                   );
@@ -273,40 +404,56 @@ function App() {
               )}
             </div>
           </div>
-          
+
           <div className="action-buttons-left">
-            <button onClick={() => setShowGuestForm(true)}>
-              Add Guest
-            </button>
-            <button onClick={() => setShowFamilyForm(true)}>
-              Add Family
-            </button>
-            <button 
+            {canEdit && (
+              <>
+                <button onClick={() => setShowGuestForm(true)}>
+                  Add Guest
+                </button>
+                <button onClick={() => setShowFamilyForm(true)}>
+                  Add Family
+                </button>
+              </>
+            )}
+            <button
               className="category-button"
               onClick={() => setShowCategoryForm(true)}
             >
-              Add/Remove Category
+              {canEdit ? 'Add/Remove Category' : 'View Categories'}
             </button>
           </div>
-          <div className="action-buttons-right">
-            <button 
-              className="export-button"
-              onClick={handleExport}
-            >
-              Export Data
-            </button>
-            <label className="import-button-label">
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleImport}
-                style={{ display: 'none' }}
-              />
-              <span className="import-button">Import Data</span>
-            </label>
-          </div>
+          {user?.isOwner && (
+            <div className="action-buttons-right">
+              <button
+                className="manage-users-button"
+                onClick={() => setShowUserManagement(true)}
+              >
+                Manage Users
+              </button>
+              <button
+                className="export-button"
+                onClick={handleExport}
+                disabled={isExporting}
+              >
+                {isExporting ? 'Exporting...' : 'Export Data'}
+              </button>
+              <label className={`import-button-label ${isImporting ? 'disabled' : ''}`}>
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleImport}
+                  style={{ display: 'none' }}
+                  disabled={isImporting}
+                />
+                <span className="import-button">
+                  {isImporting ? 'Importing...' : 'Import Data'}
+                </span>
+              </label>
+            </div>
+          )}
         </div>
-        
+
         <div className="search-and-stats">
           <div className="search-bar">
             <label htmlFor="search-input">Search:</label>
@@ -325,51 +472,35 @@ function App() {
                 onClick={() => setSearchTerm('')}
                 aria-label="Clear search"
               >
-                ×
+                x
               </button>
             )}
           </div>
           <div className="total-guests-top">
-            <p>Total Guests: <strong>{(() => {
-              // Calculate filtered guest count (same logic as GuestList)
-              let filtered = tabFilteredGuests;
-              
-              // Filter by categories
-              if (selectedCategories.length > 0) {
-                filtered = filtered.filter(guest => 
-                  selectedCategories.some(cat => guest.tags.includes(cat))
-                );
-              }
-              
-              // Filter by search term
-              if (searchTerm.trim()) {
-                const searchLower = searchTerm.toLowerCase().trim();
-                filtered = filtered.filter(guest => {
-                  const fullName = `${guest.firstName} ${guest.lastName}`.toLowerCase();
-                  return fullName.includes(searchLower);
-                });
-              }
-              
-              return filtered.length;
-            })()}</strong></p>
+            <p>Total Guests: <strong>{filteredGuests.length}</strong></p>
           </div>
         </div>
       </div>
 
-      {showGuestForm && (
+      {showGuestForm && currentEvent && (
         <GuestForm
           onClose={() => setShowGuestForm(false)}
           onSuccess={handleGuestAdded}
           categories={categories}
+          eventId={currentEvent.id}
+          events={events}
+          currentEventName={currentEvent.name}
         />
       )}
 
-      {showFamilyForm && (
+      {showFamilyForm && currentEvent && (
         <FamilyForm
           onClose={() => setShowFamilyForm(false)}
           onSuccess={handleFamilyAdded}
           categories={categories}
           guests={guests}
+          eventId={currentEvent.id}
+          events={events}
         />
       )}
 
@@ -378,21 +509,56 @@ function App() {
           categories={categories}
           onClose={() => setShowCategoryForm(false)}
           onSuccess={() => {
-            // Refresh categories but keep modal open
+            fetchCategories().then(setCategories);
+          }}
+          readOnly={!canEdit}
+        />
+      )}
+
+      {showUserManagement && (
+        <UserManagement onClose={() => setShowUserManagement(false)} />
+      )}
+
+      {editingEvent && currentEvent && (
+        <EventSettings
+          event={currentEvent}
+          events={events}
+          onClose={() => setEditingEvent(null)}
+          onSuccess={() => {
+            setEditingEvent(null);
+            refreshEvents();
             loadData(true);
+          }}
+          onEventDeleted={() => {
+            setEditingEvent(null);
+            refreshEvents();
           }}
         />
       )}
 
-      <GuestList
-        guests={tabFilteredGuests}
-        families={families}
-        categories={categories}
-        selectedCategories={selectedCategories}
-        searchTerm={searchTerm}
-        onUpdate={() => loadData(true)}
-      />
-      
+      {loading ? (
+        <div className="loading-state">
+          <p>Loading guests...</p>
+        </div>
+      ) : currentEvent ? (
+        <GuestList
+          guests={guests}
+          families={families}
+          categories={categories}
+          selectedCategories={selectedCategories}
+          searchTerm={searchTerm}
+          onUpdate={() => loadData(true)}
+          eventId={currentEvent.id}
+          readOnly={!canEdit}
+          events={events}
+          guestPresence={guestPresence}
+        />
+      ) : (
+        <div className="empty-state">
+          <p>No events available. {user?.isOwner && 'Click + to create one.'}</p>
+        </div>
+      )}
+
       <ScrollToTop />
     </div>
   );

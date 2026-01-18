@@ -1,10 +1,13 @@
-import { Guest, Family, CategoryInfo } from '../../shared/types/index';
-import { getCategoryColor } from '../../shared/utils/colors';
-import { capitalizeWords } from '../../shared/utils/capitalize';
-import * as fs from 'fs';
-import * as path from 'path';
+/**
+ * Data store with async file persistence.
+ * Uses in-memory Maps for fast access with async JSON file backup.
+ * Supports multi-user permissions and event-scoped guest lists.
+ */
 
-const DATA_FILE = path.join(__dirname, '../../data/data.json');
+import { Guest, Family, CategoryInfo, User, Event, UserEventPermission, PermissionLevel } from '../../shared/types/index';
+import { getCategoryColor } from '../../shared/utils/colors';
+import * as fs from 'fs/promises';
+import { getConfig } from './config';
 
 // Default categories
 const DEFAULT_CATEGORIES: CategoryInfo[] = [
@@ -21,17 +24,78 @@ const DEFAULT_CATEGORIES: CategoryInfo[] = [
   { name: 'Jason Other', color: getCategoryColor('Jason Other') },
 ];
 
-// Simple in-memory data store with JSON file persistence
+// Legacy guest format (before event-scoped lists)
+interface LegacyGuest {
+  id: string;
+  firstName: string;
+  lastName: string;
+  familyId: string | null;
+  tags: string[];
+  rsvp?: string;
+  reception?: boolean;
+  events?: string[];
+}
+
+// Legacy family format
+interface LegacyFamily {
+  id: string;
+  name: string;
+  members: string[];
+}
+
+interface StoredData {
+  guests: Guest[];
+  families: Family[];
+  categories: CategoryInfo[];
+  users?: User[];
+  events?: Event[];
+  permissions?: UserEventPermission[];
+}
+
+/**
+ * In-memory data store with async JSON file persistence.
+ * Data is kept in memory for fast access and persisted to disk asynchronously.
+ */
 class DataStore {
+  // Core data
   private guests: Map<string, Guest> = new Map();
   private families: Map<string, Family> = new Map();
   private categories: Map<string, CategoryInfo> = new Map();
+
+  // Multi-user data
+  private users: Map<string, User> = new Map();
+  private events: Map<string, Event> = new Map();
+  private permissions: Map<string, UserEventPermission> = new Map(); // key: `${userId}-${eventId}`
+
+  // ID counters
   private nextGuestId = 1;
   private nextFamilyId = 1;
+  private nextUserId = 1;
+  private nextEventId = 1;
+
+  // File persistence
+  private dataFilePath: string;
+  private saveTimeout: NodeJS.Timeout | null = null;
+  private initialized = false;
+  private initPromise: Promise<void> | null = null;
 
   constructor() {
+    const config = getConfig();
+    this.dataFilePath = config.data.filePath;
     this.initializeDefaultCategories();
-    this.loadFromFile();
+    // Start initialization immediately
+    this.initPromise = this.loadFromFile();
+  }
+
+  /**
+   * Ensure the store is initialized before use.
+   * Safe to call multiple times - will return cached promise.
+   */
+  async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+    if (this.initPromise) {
+      await this.initPromise;
+    }
   }
 
   private initializeDefaultCategories(): void {
@@ -40,73 +104,481 @@ class DataStore {
     });
   }
 
-  private loadFromFile(): void {
-    try {
-      if (fs.existsSync(DATA_FILE)) {
-        const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
-        
-        // Load guests
-        if (data.guests && Array.isArray(data.guests)) {
-          data.guests.forEach((guest: Guest) => {
-            this.guests.set(guest.id, guest);
-            const idNum = parseInt(guest.id.replace('guest-', ''));
-            if (idNum >= this.nextGuestId) {
-              this.nextGuestId = idNum + 1;
-            }
-          });
-        }
+  /**
+   * Migrate legacy data format to event-scoped format.
+   * Called automatically on first load if events array is missing.
+   */
+  private migrateToEventScoped(data: StoredData): StoredData {
+    // Check if already migrated (has events)
+    if (data.events && data.events.length > 0) {
+      return data;
+    }
 
-        // Load families
-        if (data.families && Array.isArray(data.families)) {
-          data.families.forEach((family: Family) => {
-            this.families.set(family.id, family);
-            const idNum = parseInt(family.id.replace('family-', ''));
-            if (idNum >= this.nextFamilyId) {
-              this.nextFamilyId = idNum + 1;
-            }
-          });
-        }
+    console.log('Migrating to event-scoped format...');
 
-        // Load categories
-        if (data.categories && Array.isArray(data.categories)) {
-          data.categories.forEach((category: CategoryInfo) => {
-            this.categories.set(category.name.toLowerCase(), category);
-          });
-        } else {
-          // If no categories in file, use defaults
-          this.initializeDefaultCategories();
+    const now = Date.now();
+
+    // Create default events
+    const ceremonyEvent: Event = {
+      id: 'event-1',
+      name: 'Ceremony',
+      order: 0,
+      createdAt: now,
+      createdBy: 'system',
+    };
+
+    const receptionEvent: Event = {
+      id: 'event-2',
+      name: 'Reception',
+      order: 1,
+      createdAt: now,
+      createdBy: 'system',
+    };
+
+    // Cast guests to legacy format to access reception field
+    const legacyGuests = data.guests as unknown as LegacyGuest[];
+    const legacyFamilies = data.families as unknown as LegacyFamily[];
+
+    // Maps to track old ID -> new IDs for each event
+    const ceremonyGuestIdMap = new Map<string, string>();
+    const receptionGuestIdMap = new Map<string, string>();
+    const ceremonyFamilyIdMap = new Map<string, string>();
+    const receptionFamilyIdMap = new Map<string, string>();
+
+    const migratedGuests: Guest[] = [];
+    const migratedFamilies: Family[] = [];
+    let guestIdCounter = 1;
+    let familyIdCounter = 1;
+
+    // Migrate guests to ceremony event (all guests)
+    for (const oldGuest of legacyGuests) {
+      const newId = `guest-${guestIdCounter++}`;
+      ceremonyGuestIdMap.set(oldGuest.id, newId);
+
+      migratedGuests.push({
+        id: newId,
+        eventId: ceremonyEvent.id,
+        firstName: oldGuest.firstName || '',
+        lastName: oldGuest.lastName || '',
+        familyId: null, // Will be set after family migration
+        tags: oldGuest.tags || [],
+        rsvp: oldGuest.rsvp as Guest['rsvp'],
+      });
+    }
+
+    // Migrate reception guests (those with reception: true)
+    for (const oldGuest of legacyGuests) {
+      if (oldGuest.reception === true) {
+        const newId = `guest-${guestIdCounter++}`;
+        receptionGuestIdMap.set(oldGuest.id, newId);
+
+        migratedGuests.push({
+          id: newId,
+          eventId: receptionEvent.id,
+          firstName: oldGuest.firstName || '',
+          lastName: oldGuest.lastName || '',
+          familyId: null, // Will be set after family migration
+          tags: oldGuest.tags || [],
+          rsvp: oldGuest.rsvp as Guest['rsvp'],
+        });
+      }
+    }
+
+    // Migrate families to ceremony event
+    for (const oldFamily of legacyFamilies) {
+      const newId = `family-${familyIdCounter++}`;
+      ceremonyFamilyIdMap.set(oldFamily.id, newId);
+
+      // Map member IDs to new ceremony guest IDs
+      const newMembers = oldFamily.members
+        .map(oldMemberId => ceremonyGuestIdMap.get(oldMemberId))
+        .filter((id): id is string => id !== undefined);
+
+      migratedFamilies.push({
+        id: newId,
+        eventId: ceremonyEvent.id,
+        name: oldFamily.name,
+        members: newMembers,
+      });
+
+      // Update guest familyId references
+      for (const memberId of newMembers) {
+        const guest = migratedGuests.find(g => g.id === memberId);
+        if (guest) {
+          guest.familyId = newId;
         }
       }
+    }
+
+    // Migrate families to reception event (only if they have reception members)
+    for (const oldFamily of legacyFamilies) {
+      const receptionMembers = oldFamily.members
+        .map(oldMemberId => receptionGuestIdMap.get(oldMemberId))
+        .filter((id): id is string => id !== undefined);
+
+      if (receptionMembers.length > 0) {
+        const newId = `family-${familyIdCounter++}`;
+        receptionFamilyIdMap.set(oldFamily.id, newId);
+
+        migratedFamilies.push({
+          id: newId,
+          eventId: receptionEvent.id,
+          name: oldFamily.name,
+          members: receptionMembers,
+        });
+
+        // Update guest familyId references
+        for (const memberId of receptionMembers) {
+          const guest = migratedGuests.find(g => g.id === memberId);
+          if (guest) {
+            guest.familyId = newId;
+          }
+        }
+      }
+    }
+
+    console.log(`Migration complete: ${migratedGuests.length} guests, ${migratedFamilies.length} families`);
+
+    return {
+      guests: migratedGuests,
+      families: migratedFamilies,
+      categories: data.categories,
+      users: [],
+      events: [ceremonyEvent, receptionEvent],
+      permissions: [],
+    };
+  }
+
+  private async loadFromFile(): Promise<void> {
+    try {
+      const config = getConfig();
+
+      // Ensure data directory exists
+      await fs.mkdir(config.data.directory, { recursive: true });
+
+      const rawData = await fs.readFile(this.dataFilePath, 'utf-8');
+      let parsed: StoredData = JSON.parse(rawData);
+
+      // Migrate if needed
+      parsed = this.migrateToEventScoped(parsed);
+
+      // Load guests
+      if (parsed.guests && Array.isArray(parsed.guests)) {
+        parsed.guests.forEach((guest: Guest) => {
+          this.guests.set(guest.id, guest);
+          const idNum = parseInt(guest.id.replace('guest-', ''));
+          if (idNum >= this.nextGuestId) {
+            this.nextGuestId = idNum + 1;
+          }
+        });
+      }
+
+      // Load families
+      if (parsed.families && Array.isArray(parsed.families)) {
+        parsed.families.forEach((family: Family) => {
+          this.families.set(family.id, family);
+          const idNum = parseInt(family.id.replace('family-', ''));
+          if (idNum >= this.nextFamilyId) {
+            this.nextFamilyId = idNum + 1;
+          }
+        });
+      }
+
+      // Load categories
+      if (parsed.categories && Array.isArray(parsed.categories)) {
+        this.categories.clear();
+        parsed.categories.forEach((category: CategoryInfo) => {
+          this.categories.set(category.name.toLowerCase(), category);
+        });
+      }
+
+      // Load users
+      if (parsed.users && Array.isArray(parsed.users)) {
+        parsed.users.forEach((user: User) => {
+          this.users.set(user.id, user);
+          const idNum = parseInt(user.id.replace('user-', ''));
+          if (idNum >= this.nextUserId) {
+            this.nextUserId = idNum + 1;
+          }
+        });
+      }
+
+      // Load events
+      if (parsed.events && Array.isArray(parsed.events)) {
+        parsed.events.forEach((event: Event) => {
+          this.events.set(event.id, event);
+          const idNum = parseInt(event.id.replace('event-', ''));
+          if (idNum >= this.nextEventId) {
+            this.nextEventId = idNum + 1;
+          }
+        });
+      }
+
+      // Load permissions
+      if (parsed.permissions && Array.isArray(parsed.permissions)) {
+        parsed.permissions.forEach((perm: UserEventPermission) => {
+          const key = `${perm.userId}-${perm.eventId}`;
+          this.permissions.set(key, perm);
+        });
+      }
+
+      console.log(`Loaded: ${this.guests.size} guests, ${this.families.size} families, ${this.categories.size} categories, ${this.users.size} users, ${this.events.size} events`);
     } catch (error) {
-      console.error('Error loading data from file:', error);
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        console.log('No existing data file, starting fresh');
+        // Create default ceremony event
+        const now = Date.now();
+        const defaultEvent: Event = {
+          id: `event-${this.nextEventId++}`,
+          name: 'Ceremony',
+          order: 0,
+          createdAt: now,
+          createdBy: 'system',
+        };
+        this.events.set(defaultEvent.id, defaultEvent);
+      } else {
+        console.error('Error loading data from file:', error);
+      }
+    } finally {
+      this.initialized = true;
     }
   }
 
-  private saveToFile(): void {
-    try {
-      const dataDir = path.dirname(DATA_FILE);
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-      }
+  /**
+   * Schedule an async save operation.
+   * Debounces multiple rapid changes into a single write.
+   */
+  private scheduleSave(): void {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+    }
 
-      const data = {
+    this.saveTimeout = setTimeout(() => {
+      this.saveToFile().catch(err => {
+        console.error('Error saving data to file:', err);
+      });
+    }, 500);
+  }
+
+  private async saveToFile(): Promise<void> {
+    try {
+      const config = getConfig();
+
+      await fs.mkdir(config.data.directory, { recursive: true });
+
+      const data: StoredData = {
         guests: Array.from(this.guests.values()),
         families: Array.from(this.families.values()),
         categories: Array.from(this.categories.values()),
+        users: Array.from(this.users.values()),
+        events: Array.from(this.events.values()),
+        permissions: Array.from(this.permissions.values()),
       };
 
-      fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+      const tempPath = `${this.dataFilePath}.tmp`;
+      await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf-8');
+      await fs.rename(tempPath, this.dataFilePath);
     } catch (error) {
       console.error('Error saving data to file:', error);
+      throw error;
     }
   }
 
-  // Guest operations
+  /**
+   * Force immediate save (useful for testing or shutdown).
+   */
+  async flush(): Promise<void> {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+      this.saveTimeout = null;
+    }
+    await this.saveToFile();
+  }
+
+  // ============================================================
+  // User operations
+  // ============================================================
+
+  addUser(user: Omit<User, 'id'>): User {
+    const id = `user-${this.nextUserId++}`;
+    const newUser: User = { ...user, id };
+    this.users.set(id, newUser);
+    this.scheduleSave();
+    return newUser;
+  }
+
+  getUser(id: string): User | undefined {
+    return this.users.get(id);
+  }
+
+  getUserByUsername(username: string): User | undefined {
+    for (const user of this.users.values()) {
+      if (user.username.toLowerCase() === username.toLowerCase()) {
+        return user;
+      }
+    }
+    return undefined;
+  }
+
+  getAllUsers(): User[] {
+    return Array.from(this.users.values());
+  }
+
+  updateUser(id: string, updates: Partial<Omit<User, 'id'>>): User | null {
+    const user = this.users.get(id);
+    if (!user) return null;
+    const updated = { ...user, ...updates };
+    this.users.set(id, updated);
+    this.scheduleSave();
+    return updated;
+  }
+
+  deleteUser(id: string): boolean {
+    const deleted = this.users.delete(id);
+    if (deleted) {
+      // Also delete user's permissions
+      for (const [key, perm] of this.permissions.entries()) {
+        if (perm.userId === id) {
+          this.permissions.delete(key);
+        }
+      }
+      this.scheduleSave();
+    }
+    return deleted;
+  }
+
+  // ============================================================
+  // Event operations
+  // ============================================================
+
+  addEvent(event: Omit<Event, 'id'>): Event {
+    const id = `event-${this.nextEventId++}`;
+    const newEvent: Event = { ...event, id };
+    this.events.set(id, newEvent);
+
+    // Give all existing non-owner users viewer permission on new event
+    for (const user of this.users.values()) {
+      if (!user.isOwner) {
+        this.setPermission(user.id, id, 'viewer');
+      }
+    }
+
+    this.scheduleSave();
+    return newEvent;
+  }
+
+  getEvent(id: string): Event | undefined {
+    return this.events.get(id);
+  }
+
+  getAllEvents(): Event[] {
+    return Array.from(this.events.values()).sort((a, b) => a.order - b.order);
+  }
+
+  updateEvent(id: string, updates: Partial<Omit<Event, 'id'>>): Event | null {
+    const event = this.events.get(id);
+    if (!event) return null;
+    const updated = { ...event, ...updates };
+    this.events.set(id, updated);
+    this.scheduleSave();
+    return updated;
+  }
+
+  deleteEvent(id: string): boolean {
+    const deleted = this.events.delete(id);
+    if (deleted) {
+      // Delete all guests in this event
+      for (const [guestId, guest] of this.guests.entries()) {
+        if (guest.eventId === id) {
+          this.guests.delete(guestId);
+        }
+      }
+      // Delete all families in this event
+      for (const [familyId, family] of this.families.entries()) {
+        if (family.eventId === id) {
+          this.families.delete(familyId);
+        }
+      }
+      // Delete all permissions for this event
+      for (const [key, perm] of this.permissions.entries()) {
+        if (perm.eventId === id) {
+          this.permissions.delete(key);
+        }
+      }
+      this.scheduleSave();
+    }
+    return deleted;
+  }
+
+  reorderEvents(eventIds: string[]): void {
+    eventIds.forEach((id, index) => {
+      const event = this.events.get(id);
+      if (event) {
+        event.order = index;
+        this.events.set(id, event);
+      }
+    });
+    this.scheduleSave();
+  }
+
+  // ============================================================
+  // Permission operations
+  // ============================================================
+
+  setPermission(userId: string, eventId: string, permission: PermissionLevel): void {
+    const key = `${userId}-${eventId}`;
+    if (permission === 'none') {
+      // Could either store 'none' or delete - we'll store it for explicit tracking
+    }
+    this.permissions.set(key, { userId, eventId, permission });
+    this.scheduleSave();
+  }
+
+  getPermission(userId: string, eventId: string): PermissionLevel {
+    const key = `${userId}-${eventId}`;
+    const perm = this.permissions.get(key);
+    // Default to viewer if no explicit permission
+    return perm?.permission ?? 'viewer';
+  }
+
+  getUserPermissions(userId: string): UserEventPermission[] {
+    const result: UserEventPermission[] = [];
+    for (const perm of this.permissions.values()) {
+      if (perm.userId === userId) {
+        result.push(perm);
+      }
+    }
+    return result;
+  }
+
+  getEventPermissions(eventId: string): UserEventPermission[] {
+    const result: UserEventPermission[] = [];
+    for (const perm of this.permissions.values()) {
+      if (perm.eventId === eventId) {
+        result.push(perm);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Assign default viewer permissions to a new user for all existing events.
+   */
+  assignDefaultPermissions(userId: string): void {
+    for (const event of this.events.values()) {
+      this.setPermission(userId, event.id, 'viewer');
+    }
+  }
+
+  // ============================================================
+  // Guest operations (event-scoped)
+  // ============================================================
+
   addGuest(guest: Omit<Guest, 'id'>): Guest {
     const id = `guest-${this.nextGuestId++}`;
     const newGuest: Guest = { ...guest, id };
     this.guests.set(id, newGuest);
-    this.saveToFile();
+    this.scheduleSave();
     return newGuest;
   }
 
@@ -118,29 +590,214 @@ class DataStore {
     return Array.from(this.guests.values());
   }
 
+  getGuestsForEvent(eventId: string): Guest[] {
+    return Array.from(this.guests.values()).filter(g => g.eventId === eventId);
+  }
+
   updateGuest(id: string, updates: Partial<Omit<Guest, 'id'>>): Guest | null {
     const guest = this.guests.get(id);
     if (!guest) return null;
     const updated = { ...guest, ...updates };
     this.guests.set(id, updated);
-    this.saveToFile();
+    this.scheduleSave();
     return updated;
   }
 
   deleteGuest(id: string): boolean {
+    const guest = this.guests.get(id);
+    if (!guest) return false;
+
+    // Remove from any family
+    if (guest.familyId) {
+      const family = this.families.get(guest.familyId);
+      if (family) {
+        family.members = family.members.filter(m => m !== id);
+        this.families.set(family.id, family);
+      }
+    }
+
     const deleted = this.guests.delete(id);
     if (deleted) {
-      this.saveToFile();
+      this.scheduleSave();
     }
     return deleted;
   }
 
-  // Family operations
+  /**
+   * Copy a guest to another event, preserving family relationships.
+   */
+  copyGuestToEvent(guestId: string, targetEventId: string): Guest | null {
+    const sourceGuest = this.guests.get(guestId);
+    if (!sourceGuest) return null;
+
+    // Check if a guest with the same name already exists in the target event
+    const targetEventGuests = this.getGuestsForEvent(targetEventId);
+    const existingGuest = targetEventGuests.find(g =>
+      g.firstName.toLowerCase() === sourceGuest.firstName.toLowerCase() &&
+      g.lastName.toLowerCase() === sourceGuest.lastName.toLowerCase()
+    );
+
+    if (existingGuest) {
+      // Guest already exists in target event, but check if we need to add them to a family
+      if (!existingGuest.familyId && sourceGuest.familyId) {
+        this.ensureFamilyForGuestInEvent(existingGuest, sourceGuest.familyId, targetEventId);
+      }
+      return existingGuest;
+    }
+
+    // Create the new guest first (without family)
+    const newGuest = this.addGuest({
+      eventId: targetEventId,
+      firstName: sourceGuest.firstName,
+      lastName: sourceGuest.lastName,
+      familyId: null,
+      tags: [...sourceGuest.tags],
+      rsvp: undefined, // Reset RSVP for new event
+    });
+
+    // If source guest belongs to a family, try to preserve the relationship
+    if (sourceGuest.familyId) {
+      this.ensureFamilyForGuestInEvent(newGuest, sourceGuest.familyId, targetEventId);
+    }
+
+    return newGuest;
+  }
+
+  /**
+   * Ensure a guest is part of the appropriate family in the target event.
+   * Creates the family if it doesn't exist, or adds to existing family.
+   */
+  private ensureFamilyForGuestInEvent(guest: Guest, sourceFamilyId: string, targetEventId: string): void {
+    const sourceFamily = this.families.get(sourceFamilyId);
+    if (!sourceFamily) return;
+
+    const targetEventFamilies = this.getFamiliesForEvent(targetEventId);
+    const targetEventGuests = this.getGuestsForEvent(targetEventId);
+
+    // Find if a family with the same name already exists in the target event
+    let targetFamily = targetEventFamilies.find(f =>
+      f.name.toLowerCase() === sourceFamily.name.toLowerCase()
+    );
+
+    if (!targetFamily) {
+      // Check if any other family members from the source family exist in the target event
+      const sourceFamilyMembers = sourceFamily.members
+        .map(id => this.guests.get(id))
+        .filter((g): g is Guest => g !== undefined);
+
+      const existingMembersInTarget = targetEventGuests.filter(targetGuest => {
+        return sourceFamilyMembers.some(sourceMember =>
+          sourceMember.firstName.toLowerCase() === targetGuest.firstName.toLowerCase() &&
+          sourceMember.lastName.toLowerCase() === targetGuest.lastName.toLowerCase()
+        );
+      });
+
+      // Only create family if there are at least 2 members (including this guest)
+      if (existingMembersInTarget.length >= 1) {
+        // Create a new family in the target event
+        targetFamily = this.addFamily({
+          eventId: targetEventId,
+          name: sourceFamily.name,
+          members: [],
+        });
+
+        // Add existing members to the new family
+        for (const member of existingMembersInTarget) {
+          if (!targetFamily.members.includes(member.id)) {
+            targetFamily.members.push(member.id);
+            member.familyId = targetFamily.id;
+            this.guests.set(member.id, member);
+          }
+        }
+        this.families.set(targetFamily.id, targetFamily);
+      }
+    }
+
+    // Add this guest to the target family
+    if (targetFamily && !targetFamily.members.includes(guest.id)) {
+      targetFamily.members.push(guest.id);
+      this.families.set(targetFamily.id, targetFamily);
+      guest.familyId = targetFamily.id;
+      this.guests.set(guest.id, guest);
+    }
+
+    this.scheduleSave();
+  }
+
+  /**
+   * Reconstruct family relationships in a target event based on a source event.
+   * This is useful for fixing events where families were lost during copy.
+   */
+  reconstructFamiliesFromSource(sourceEventId: string, targetEventId: string): { familiesCreated: number; guestsUpdated: number } {
+    const sourceGuests = this.getGuestsForEvent(sourceEventId);
+    const sourceFamilies = this.getFamiliesForEvent(sourceEventId);
+    const targetGuests = this.getGuestsForEvent(targetEventId);
+    const targetFamilies = this.getFamiliesForEvent(targetEventId);
+
+    let familiesCreated = 0;
+    let guestsUpdated = 0;
+
+    // For each family in source event
+    for (const sourceFamily of sourceFamilies) {
+      // Get the source family members
+      const sourceFamilyMembers = sourceFamily.members
+        .map(id => this.guests.get(id))
+        .filter((g): g is Guest => g !== undefined);
+
+      // Find matching guests in target event (by name)
+      const matchingTargetGuests = targetGuests.filter(targetGuest => {
+        // Skip if already in a family
+        if (targetGuest.familyId) return false;
+
+        return sourceFamilyMembers.some(sourceMember =>
+          sourceMember.firstName.toLowerCase() === targetGuest.firstName.toLowerCase() &&
+          sourceMember.lastName.toLowerCase() === targetGuest.lastName.toLowerCase()
+        );
+      });
+
+      // If we have at least 2 matching guests, create a family
+      if (matchingTargetGuests.length >= 2) {
+        // Check if family with same name already exists
+        let targetFamily = targetFamilies.find(f =>
+          f.name.toLowerCase() === sourceFamily.name.toLowerCase()
+        );
+
+        if (!targetFamily) {
+          // Create new family
+          targetFamily = this.addFamily({
+            eventId: targetEventId,
+            name: sourceFamily.name,
+            members: [],
+          });
+          familiesCreated++;
+        }
+
+        // Add guests to the family
+        for (const guest of matchingTargetGuests) {
+          if (!targetFamily.members.includes(guest.id)) {
+            targetFamily.members.push(guest.id);
+            guest.familyId = targetFamily.id;
+            this.guests.set(guest.id, guest);
+            guestsUpdated++;
+          }
+        }
+        this.families.set(targetFamily.id, targetFamily);
+      }
+    }
+
+    this.scheduleSave();
+    return { familiesCreated, guestsUpdated };
+  }
+
+  // ============================================================
+  // Family operations (event-scoped)
+  // ============================================================
+
   addFamily(family: Omit<Family, 'id'>): Family {
     const id = `family-${this.nextFamilyId++}`;
     const newFamily: Family = { ...family, id };
     this.families.set(id, newFamily);
-    this.saveToFile();
+    this.scheduleSave();
     return newFamily;
   }
 
@@ -152,26 +809,128 @@ class DataStore {
     return Array.from(this.families.values());
   }
 
+  getFamiliesForEvent(eventId: string): Family[] {
+    return Array.from(this.families.values()).filter(f => f.eventId === eventId);
+  }
+
   updateFamily(id: string, updates: Partial<Omit<Family, 'id'>>): Family | null {
     const family = this.families.get(id);
     if (!family) return null;
     const updated = { ...family, ...updates };
     this.families.set(id, updated);
-    this.saveToFile();
+    this.scheduleSave();
     return updated;
   }
 
   deleteFamily(id: string): boolean {
+    const family = this.families.get(id);
+    if (!family) return false;
+
+    // Remove familyId from all members
+    for (const memberId of family.members) {
+      const guest = this.guests.get(memberId);
+      if (guest) {
+        guest.familyId = null;
+        this.guests.set(memberId, guest);
+      }
+    }
+
     const deleted = this.families.delete(id);
     if (deleted) {
-      this.saveToFile();
+      this.scheduleSave();
     }
     return deleted;
   }
 
-  // Category operations
+  /**
+   * Copy a family and its members to another event.
+   */
+  copyFamilyToEvent(familyId: string, targetEventId: string): { family: Family; guests: Guest[] } | null {
+    const sourceFamily = this.families.get(familyId);
+    if (!sourceFamily) return null;
+
+    const targetEventGuests = this.getGuestsForEvent(targetEventId);
+    const targetEventFamilies = this.getFamiliesForEvent(targetEventId);
+
+    // Check if family with same name already exists
+    const existingFamily = targetEventFamilies.find(f =>
+      f.name.toLowerCase() === sourceFamily.name.toLowerCase()
+    );
+
+    // Copy all member guests (or use existing ones)
+    const copiedGuests: Guest[] = [];
+    const memberIdMap = new Map<string, string>(); // old ID -> new ID
+
+    for (const memberId of sourceFamily.members) {
+      const sourceGuest = this.guests.get(memberId);
+      if (sourceGuest) {
+        // Check if guest with same name already exists in target event
+        const existingGuest = targetEventGuests.find(g =>
+          g.firstName.toLowerCase() === sourceGuest.firstName.toLowerCase() &&
+          g.lastName.toLowerCase() === sourceGuest.lastName.toLowerCase()
+        );
+
+        if (existingGuest) {
+          // Use existing guest
+          copiedGuests.push(existingGuest);
+          memberIdMap.set(memberId, existingGuest.id);
+        } else {
+          // Create new guest
+          const newGuest = this.addGuest({
+            eventId: targetEventId,
+            firstName: sourceGuest.firstName,
+            lastName: sourceGuest.lastName,
+            familyId: null, // Will be set below
+            tags: [...sourceGuest.tags],
+            rsvp: undefined,
+          });
+          copiedGuests.push(newGuest);
+          memberIdMap.set(memberId, newGuest.id);
+        }
+      }
+    }
+
+    let family: Family;
+
+    if (existingFamily) {
+      // Add members to existing family (if not already in it)
+      const existingMemberIds = new Set(existingFamily.members);
+      const newMemberIds = copiedGuests
+        .filter(g => !existingMemberIds.has(g.id))
+        .map(g => g.id);
+
+      if (newMemberIds.length > 0) {
+        existingFamily.members = [...existingFamily.members, ...newMemberIds];
+        this.families.set(existingFamily.id, existingFamily);
+      }
+      family = existingFamily;
+    } else {
+      // Create the family with new member IDs
+      family = this.addFamily({
+        eventId: targetEventId,
+        name: sourceFamily.name,
+        members: copiedGuests.map(g => g.id),
+      });
+    }
+
+    // Update guests with family reference
+    for (const guest of copiedGuests) {
+      if (guest.familyId !== family.id) {
+        guest.familyId = family.id;
+        this.guests.set(guest.id, guest);
+      }
+    }
+
+    this.scheduleSave();
+    return { family, guests: copiedGuests };
+  }
+
+  // ============================================================
+  // Category operations (global - not event-scoped)
+  // ============================================================
+
   getAllCategories(): CategoryInfo[] {
-    return Array.from(this.categories.values()).sort((a, b) => 
+    return Array.from(this.categories.values()).sort((a, b) =>
       a.name.localeCompare(b.name)
     );
   }
@@ -182,44 +941,61 @@ class DataStore {
 
   addCategory(category: CategoryInfo): CategoryInfo {
     this.categories.set(category.name.toLowerCase(), category);
-    this.saveToFile();
+    this.scheduleSave();
     return category;
   }
 
   deleteCategory(name: string): boolean {
     const deleted = this.categories.delete(name.toLowerCase());
     if (deleted) {
-      this.saveToFile();
+      this.scheduleSave();
     }
     return deleted;
   }
 
-  // Clear all data (useful for testing)
-  clear(): void {
+  // ============================================================
+  // Utility operations
+  // ============================================================
+
+  async clear(): Promise<void> {
     this.guests.clear();
     this.families.clear();
     this.categories.clear();
+    this.users.clear();
+    this.events.clear();
+    this.permissions.clear();
     this.nextGuestId = 1;
     this.nextFamilyId = 1;
+    this.nextUserId = 1;
+    this.nextEventId = 1;
     this.initializeDefaultCategories();
-    if (fs.existsSync(DATA_FILE)) {
-      fs.unlinkSync(DATA_FILE);
+
+    try {
+      await fs.unlink(this.dataFilePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
     }
   }
 
-  // Import data with existing IDs (for data import feature)
-  importData(data: { guests: Guest[]; families: Family[]; categories: CategoryInfo[] }): void {
-    // Clear existing data
+  /**
+   * Import data with existing IDs (for data import feature).
+   */
+  importData(data: StoredData): void {
     this.guests.clear();
     this.families.clear();
     this.categories.clear();
+    this.users.clear();
+    this.events.clear();
+    this.permissions.clear();
 
     // Import categories
     data.categories.forEach((category) => {
       this.categories.set(category.name.toLowerCase(), category);
     });
 
-    // Import guests (preserve IDs)
+    // Import guests
     let maxGuestId = 0;
     data.guests.forEach((guest) => {
       this.guests.set(guest.id, guest);
@@ -230,7 +1006,7 @@ class DataStore {
     });
     this.nextGuestId = maxGuestId;
 
-    // Import families (preserve IDs)
+    // Import families
     let maxFamilyId = 0;
     data.families.forEach((family) => {
       this.families.set(family.id, family);
@@ -241,9 +1017,57 @@ class DataStore {
     });
     this.nextFamilyId = maxFamilyId;
 
-    // Save to file
-    this.saveToFile();
+    // Import users
+    if (data.users) {
+      let maxUserId = 0;
+      data.users.forEach((user) => {
+        this.users.set(user.id, user);
+        const idNum = parseInt(user.id.replace('user-', ''));
+        if (idNum >= maxUserId) {
+          maxUserId = idNum + 1;
+        }
+      });
+      this.nextUserId = maxUserId;
+    }
+
+    // Import events
+    if (data.events) {
+      let maxEventId = 0;
+      data.events.forEach((event) => {
+        this.events.set(event.id, event);
+        const idNum = parseInt(event.id.replace('event-', ''));
+        if (idNum >= maxEventId) {
+          maxEventId = idNum + 1;
+        }
+      });
+      this.nextEventId = maxEventId;
+    }
+
+    // Import permissions
+    if (data.permissions) {
+      data.permissions.forEach((perm) => {
+        const key = `${perm.userId}-${perm.eventId}`;
+        this.permissions.set(key, perm);
+      });
+    }
+
+    this.scheduleSave();
+  }
+
+  /**
+   * Get export data (for backup/export feature).
+   */
+  getExportData(): StoredData {
+    return {
+      guests: this.getAllGuests(),
+      families: this.getAllFamilies(),
+      categories: this.getAllCategories(),
+      users: this.getAllUsers(),
+      events: this.getAllEvents(),
+      permissions: Array.from(this.permissions.values()),
+    };
   }
 }
 
+// Singleton instance
 export const store = new DataStore();

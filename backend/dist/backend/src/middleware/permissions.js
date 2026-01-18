@@ -1,0 +1,81 @@
+"use strict";
+/**
+ * Permission middleware for event-level access control.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.requireEventViewer = exports.requireEventAdmin = void 0;
+exports.requireOwner = requireOwner;
+exports.requireEventPermission = requireEventPermission;
+const store_1 = require("../store");
+const apiResponse_1 = require("../apiResponse");
+// Permission level hierarchy (higher index = more permissions)
+const PERMISSION_LEVELS = ['none', 'viewer', 'admin'];
+/**
+ * Middleware to require owner access.
+ * Owner is the user configured via AUTH_USERNAME/AUTH_PASSWORD env vars.
+ */
+function requireOwner(req, res, next) {
+    if (!req.user) {
+        (0, apiResponse_1.sendUnauthorized)(res, 'Authentication required');
+        return;
+    }
+    if (!req.user.isOwner) {
+        (0, apiResponse_1.sendForbidden)(res, 'Owner access required');
+        return;
+    }
+    next();
+}
+/**
+ * Middleware factory to require a minimum permission level for an event.
+ * The eventId is extracted from req.params.eventId.
+ *
+ * @param minLevel - Minimum permission level required ('viewer' or 'admin')
+ */
+function requireEventPermission(minLevel) {
+    return (req, res, next) => {
+        if (!req.user) {
+            (0, apiResponse_1.sendUnauthorized)(res, 'Authentication required');
+            return;
+        }
+        // Owner has full access to all events
+        if (req.user.isOwner) {
+            next();
+            return;
+        }
+        const eventId = req.params.eventId;
+        if (!eventId) {
+            (0, apiResponse_1.sendForbidden)(res, 'Event ID required');
+            return;
+        }
+        // Check if event exists
+        const event = store_1.store.getEvent(eventId);
+        if (!event) {
+            (0, apiResponse_1.sendForbidden)(res, 'Event not found');
+            return;
+        }
+        // Get user's permission for this event
+        const userPermission = store_1.store.getPermission(req.user.userId, eventId);
+        const userLevel = PERMISSION_LEVELS.indexOf(userPermission);
+        const requiredLevel = PERMISSION_LEVELS.indexOf(minLevel);
+        if (userLevel < requiredLevel) {
+            if (userPermission === 'none') {
+                (0, apiResponse_1.sendForbidden)(res, 'You do not have access to this event. Please contact the owner to request access.');
+            }
+            else {
+                (0, apiResponse_1.sendForbidden)(res, `This action requires ${minLevel} access. You have ${userPermission} access.`);
+            }
+            return;
+        }
+        next();
+    };
+}
+/**
+ * Middleware to check if user can edit (admin or owner).
+ * Shorthand for requireEventPermission('admin').
+ */
+exports.requireEventAdmin = requireEventPermission('admin');
+/**
+ * Middleware to check if user can view (viewer, admin, or owner).
+ * Shorthand for requireEventPermission('viewer').
+ */
+exports.requireEventViewer = requireEventPermission('viewer');

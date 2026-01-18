@@ -104,3 +104,53 @@
 .edit-button:hover {
   background-color: #1976d2;
 }
+
+.copy-button {
+  padding: 6px 12px;
+  background-color: #9C27B0;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+.copy-button:hover {
+  background-color: #7B1FA2;
+}
+
+/* Guest event badges - shows which other events a guest is in */
+.guest-event-badges {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+  align-items: center;
+}
+
+.event-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background-color: #E8F5E9;
+  color: #2E7D32;
+  border: 1px solid #81C784;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Selection checkbox */
+.guest-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  margin-right: 12px;
+  flex-shrink: 0;
+  accent-color: #4CAF50;
+}
+
+.guest-item.selected {
+  background-color: #E8F5E9;
+  border-left: 3px solid #4CAF50;
+}

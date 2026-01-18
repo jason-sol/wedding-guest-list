@@ -1,17 +1,24 @@
-import { useState, useEffect } from 'react';
-import { Family, Guest, Category, CategoryInfo } from '../types';
-import { updateFamily, reorderFamilyMembers, addGuestToFamily, removeGuestFromFamily, updateGuest, deleteFamily, deleteGuest } from '../api';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Family, Guest, Category, CategoryInfo, Event, PermissionLevel } from '../types';
+import { updateFamily, reorderFamilyMembers, addGuestToFamily, removeGuestFromFamily, updateGuest, deleteFamily, deleteGuest, copyFamily, GuestPresenceMap } from '../api';
 import CategoryDropdown from './CategoryDropdown';
 import './EditFamilyForm.css';
 import './GuestForm.css';
+
+interface EventWithPermission extends Event {
+  permission: PermissionLevel;
+}
 
 interface EditFamilyFormProps {
   family: Family;
   familyGuests: Guest[];
   allGuests: Guest[];
   categories: CategoryInfo[];
+  eventId: string;
   onClose: () => void;
   onSuccess: () => void;
+  events?: EventWithPermission[];
+  guestPresenceMap?: GuestPresenceMap;
 }
 
 export default function EditFamilyForm({
@@ -19,8 +26,11 @@ export default function EditFamilyForm({
   familyGuests,
   allGuests,
   categories,
+  eventId,
   onClose,
   onSuccess,
+  events = [],
+  guestPresenceMap = {},
 }: EditFamilyFormProps) {
   const [familyName, setFamilyName] = useState(family.name);
   const [orderedMemberIds, setOrderedMemberIds] = useState<string[]>(family.members);
@@ -29,8 +39,78 @@ export default function EditFamilyForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteMembers, setDeleteMembers] = useState(false);
-  const [memberReception, setMemberReception] = useState<Map<string, boolean>>(new Map());
-  const [familyReception, setFamilyReception] = useState(false);
+
+  // Get other events where user has admin access
+  const otherAdminEvents = useMemo(() =>
+    events.filter(e => e.id !== eventId && e.permission === 'admin'),
+    [events, eventId]
+  );
+
+  // Calculate which events ALL family members are currently in (only on mount)
+  // Use a ref to store the original state so it doesn't change during the modal's lifetime
+  const originalEventsRef = useRef<Set<string> | null>(null);
+  const originalCategoriesRef = useRef<string[] | null>(null);
+
+  // Calculate original common categories on first render
+  if (originalCategoriesRef.current === null) {
+    if (familyGuests.length > 0) {
+      originalCategoriesRef.current = familyGuests[0].tags.filter(tag =>
+        familyGuests.every(guest => guest.tags.includes(tag))
+      );
+    } else {
+      originalCategoriesRef.current = [];
+    }
+  }
+
+  if (originalEventsRef.current === null) {
+    // Calculate on first render only
+    const eventIds = new Set<string>();
+    if (familyGuests.length > 0) {
+      const adminEvents = events.filter(e => e.id !== eventId && e.permission === 'admin');
+      for (const event of adminEvents) {
+        const allMembersInEvent = familyGuests.every(guest => {
+          const presence = guestPresenceMap[guest.id] || [];
+          return presence.some(p => p.id === event.id);
+        });
+        if (allMembersInEvent) {
+          eventIds.add(event.id);
+        }
+      }
+    }
+    originalEventsRef.current = eventIds;
+  }
+
+  // Track which events the family should be in (initialized from presence)
+  const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(() => {
+    // Calculate initial state inline
+    if (familyGuests.length === 0) return new Set<string>();
+
+    const eventIds = new Set<string>();
+    const adminEvents = events.filter(e => e.id !== eventId && e.permission === 'admin');
+
+    for (const event of adminEvents) {
+      const allMembersInEvent = familyGuests.every(guest => {
+        const presence = guestPresenceMap[guest.id] || [];
+        return presence.some(p => p.id === event.id);
+      });
+      if (allMembersInEvent) {
+        eventIds.add(event.id);
+      }
+    }
+    return eventIds;
+  });
+
+  const toggleEvent = (evtId: string) => {
+    setSelectedEventIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(evtId)) {
+        newSet.delete(evtId);
+      } else {
+        newSet.add(evtId);
+      }
+      return newSet;
+    });
+  };
 
   // Sync state with family prop when it changes
   useEffect(() => {
@@ -46,21 +126,8 @@ export default function EditFamilyForm({
         familyGuests.every(guest => guest.tags.includes(tag))
       );
       setSelectedCategories(commonCategories);
-      
-      // Initialize reception status from guests
-      const receptionMap = new Map<string, boolean>();
-      familyGuests.forEach(guest => {
-        receptionMap.set(guest.id, guest.reception || false);
-      });
-      setMemberReception(receptionMap);
-      
-      // Check if all members have reception
-      const allHaveReception = familyGuests.every(guest => guest.reception === true);
-      setFamilyReception(allHaveReception);
     } else {
       setSelectedCategories([]);
-      setMemberReception(new Map());
-      setFamilyReception(false);
     }
   }, [familyGuests]);
 
@@ -83,12 +150,12 @@ export default function EditFamilyForm({
 
       // Remove guests from family
       for (const guestId of removedMembers) {
-        await removeGuestFromFamily(family.id, guestId);
+        await removeGuestFromFamily(eventId, family.id, guestId);
       }
 
       // Add new guests to family
       for (const guestId of addedMembers) {
-        await addGuestToFamily(family.id, guestId);
+        await addGuestToFamily(eventId, family.id, guestId);
       }
 
       // Update family name
@@ -96,25 +163,70 @@ export default function EditFamilyForm({
         name: familyName.trim(),
       };
 
-      await updateFamily(family.id, updates);
+      await updateFamily(eventId, family.id, updates);
 
       // Reorder members if order changed
       if (JSON.stringify(orderedMemberIds) !== JSON.stringify(family.members)) {
-        await reorderFamilyMembers(family.id, orderedMemberIds);
+        await reorderFamilyMembers(eventId, family.id, orderedMemberIds);
       }
 
-      // Apply selected categories and reception status to all family members
+      // Apply selected categories to all family members
       // Get the final list of members after all changes
       const finalMemberIds = orderedMemberIds;
+      const originalCategories = originalCategoriesRef.current || [];
+
+      // Find categories that were removed (were in original but not in selected)
+      const removedCategories = originalCategories.filter(cat => !selectedCategories.includes(cat));
+      // Find categories that were added (in selected but not in original)
+      const addedCategories = selectedCategories.filter(cat => !originalCategories.includes(cat));
+
       for (const guestId of finalMemberIds) {
         const guest = allGuests.find(g => g.id === guestId);
         if (guest) {
-          // Merge selected categories with existing tags, removing duplicates
-          // Selected categories are added/kept, but individual tags are preserved
-          const updatedTags = Array.from(new Set([...selectedCategories, ...guest.tags]));
-          // Get reception status: family-wide setting or individual member setting
-          const receptionStatus = familyReception || memberReception.get(guestId) || false;
-          await updateGuest(guestId, { tags: updatedTags, reception: receptionStatus });
+          // Start with existing tags
+          let updatedTags = [...guest.tags];
+
+          // Remove categories that were unchecked
+          updatedTags = updatedTags.filter(tag => !removedCategories.includes(tag));
+
+          // Add categories that were checked
+          for (const cat of addedCategories) {
+            if (!updatedTags.includes(cat)) {
+              updatedTags.push(cat);
+            }
+          }
+
+          await updateGuest(eventId, guestId, { tags: updatedTags });
+        }
+      }
+
+      // Determine which events to add to and which to remove from
+      const originalEvents = originalEventsRef.current || new Set<string>();
+      const eventsToAdd = Array.from(selectedEventIds).filter(id => !originalEvents.has(id));
+      const eventsToRemove = Array.from(originalEvents).filter(id => !selectedEventIds.has(id));
+
+      // Copy family to newly selected events
+      for (const targetEventId of eventsToAdd) {
+        try {
+          await copyFamily(eventId, family.id, targetEventId);
+        } catch (err) {
+          console.error(`Failed to copy family to event ${targetEventId}:`, err);
+        }
+      }
+
+      // Remove family members from unselected events
+      for (const targetEventId of eventsToRemove) {
+        try {
+          // For each family member, find their guestId in the target event and delete
+          for (const guest of familyGuests) {
+            const presence = guestPresenceMap[guest.id] || [];
+            const presenceInfo = presence.find(p => p.id === targetEventId);
+            if (presenceInfo) {
+              await deleteGuest(targetEventId, presenceInfo.guestId);
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to remove family from event ${targetEventId}:`, err);
         }
       }
 
@@ -170,12 +282,12 @@ export default function EditFamilyForm({
       if (deleteMembers) {
         // Delete all family members
         for (const guestId of family.members) {
-          await deleteGuest(guestId);
+          await deleteGuest(eventId, guestId);
         }
       }
-      
+
       // Delete the family (this will set familyId to null for remaining members)
-      await deleteFamily(family.id);
+      await deleteFamily(eventId, family.id);
       onSuccess();
     } catch (error) {
       console.error('Failed to delete family:', error);
@@ -234,22 +346,6 @@ export default function EditFamilyForm({
                     <span className="member-name">
                       {guest.firstName} {guest.lastName}
                     </span>
-                    <label className="reception-checkbox-pill" style={{ marginLeft: 'auto', marginRight: '8px' }}>
-                      <input
-                        type="checkbox"
-                        checked={familyReception || memberReception.get(guest.id) || false}
-                        onChange={(e) => {
-                          if (familyReception) {
-                            // If family-wide is checked, uncheck it and set individual
-                            setFamilyReception(false);
-                          }
-                          const updated = new Map(memberReception);
-                          updated.set(guest.id, e.target.checked);
-                          setMemberReception(updated);
-                        }}
-                      />
-                      <span>Reception</span>
-                    </label>
                     <button
                       type="button"
                       className="remove-member-btn"
@@ -299,27 +395,24 @@ export default function EditFamilyForm({
             label="Categories (applied to all family members)"
           />
 
-          <div className="form-group">
-            <label className="reception-checkbox-pill">
-              <input
-                type="checkbox"
-                checked={familyReception}
-                onChange={(e) => {
-                  setFamilyReception(e.target.checked);
-                  // Apply to all members
-                  if (e.target.checked) {
-                    const updated = new Map<string, boolean>();
-                    orderedMemberIds.forEach(id => updated.set(id, true));
-                    setMemberReception(updated);
-                  }
-                }}
-              />
-              <span>All family members attending Reception</span>
-            </label>
-            <p style={{ fontSize: '12px', color: '#666', marginTop: '8px', marginLeft: '0' }}>
-              Check this to set reception for all members. You can override individual members above.
-            </p>
-          </div>
+          {otherAdminEvents.length > 0 && (
+            <div className="form-group">
+              <label>Event Invitations:</label>
+              <div className="event-checkboxes">
+                {otherAdminEvents.map(event => (
+                  <label key={event.id} className="event-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={selectedEventIds.has(event.id)}
+                      onChange={() => toggleEvent(event.id)}
+                      disabled={isSubmitting}
+                    />
+                    <span>{event.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="form-actions">
             <button 

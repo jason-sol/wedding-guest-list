@@ -1,8 +1,15 @@
-import { useState, useMemo } from 'react';
-import { Guest, Family, CategoryInfo } from '../types';
+import { useState, useMemo, useCallback } from 'react';
+import { Guest, Family, CategoryInfo, Event, PermissionLevel } from '../types';
+import { useFilteredGuests } from '../hooks/useFilteredGuests';
+import { GuestPresenceMap } from '../api';
 import GuestItem from './GuestItem';
 import FamilyGroup from './FamilyGroup';
+import BulkEventsModal from './BulkEventsModal';
 import './GuestList.css';
+
+interface EventWithPermission extends Event {
+  permission: PermissionLevel;
+}
 
 interface GuestListProps {
   guests: Guest[];
@@ -11,6 +18,10 @@ interface GuestListProps {
   selectedCategories: string[];
   searchTerm: string;
   onUpdate: () => void;
+  eventId: string;
+  readOnly?: boolean;
+  events?: EventWithPermission[];
+  guestPresence?: GuestPresenceMap;
 }
 
 export default function GuestList({
@@ -20,40 +31,78 @@ export default function GuestList({
   selectedCategories,
   searchTerm,
   onUpdate,
+  eventId,
+  readOnly = false,
+  events = [],
+  guestPresence = {},
 }: GuestListProps) {
-  const [removeMode, setRemoveMode] = useState(false);
-  
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedGuestIds, setSelectedGuestIds] = useState<Set<string>>(new Set());
+  const [showBulkEventsModal, setShowBulkEventsModal] = useState(false);
+
+  // Selection handlers
+  const handleSelectionChange = useCallback((guestId: string, selected: boolean) => {
+    setSelectedGuestIds(prev => {
+      const newSet = new Set(prev);
+      if (selected) {
+        newSet.add(guestId);
+      } else {
+        newSet.delete(guestId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const handleFamilySelectionChange = useCallback((guestIds: string[], selected: boolean) => {
+    setSelectedGuestIds(prev => {
+      const newSet = new Set(prev);
+      guestIds.forEach(id => {
+        if (selected) {
+          newSet.add(id);
+        } else {
+          newSet.delete(id);
+        }
+      });
+      return newSet;
+    });
+  }, []);
+
+  // Note: handleSelectAll needs filteredGuests, defined below via useMemo
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedGuestIds(new Set());
+  }, []);
+
+  const toggleSelectionMode = useCallback(() => {
+    if (selectionMode) {
+      // Exiting selection mode - clear selections
+      setSelectedGuestIds(new Set());
+    }
+    setSelectionMode(!selectionMode);
+  }, [selectionMode]);
+
+  const handleBulkActionComplete = useCallback(() => {
+    setShowBulkEventsModal(false);
+    setSelectedGuestIds(new Set());
+    setSelectionMode(false);
+    onUpdate();
+  }, [onUpdate]);
+
   // Ensure guests and families are arrays
   const safeGuests = Array.isArray(guests) ? guests : [];
   const safeFamilies = Array.isArray(families) ? families : [];
-  
-  // Filter guests by selected categories and search term
-  const filteredGuests = useMemo(() => {
-    let filtered = safeGuests;
-    
-    // Filter by categories
-    if (selectedCategories.length > 0) {
-      filtered = filtered.filter(guest => 
-        selectedCategories.some(cat => guest.tags.includes(cat))
-      );
-    }
-    
-    // Filter by search term
-    if (searchTerm.trim()) {
-      const searchLower = searchTerm.toLowerCase().trim();
-      filtered = filtered.filter(guest => {
-        const fullName = `${guest.firstName} ${guest.lastName}`.toLowerCase();
-        return fullName.includes(searchLower);
-      });
-    }
-    
-    return filtered;
-  }, [safeGuests, selectedCategories, searchTerm]);
-  
+
+  // Use shared filtering hook
+  const filteredGuests = useFilteredGuests({
+    guests: safeGuests,
+    selectedCategories,
+    searchTerm,
+  });
+
   // Filter families by search term
   const filteredFamilies = useMemo(() => {
     if (!searchTerm.trim()) return safeFamilies;
-    
+
     const searchLower = searchTerm.toLowerCase().trim();
     return safeFamilies.filter(family => {
       // Check if family name matches
@@ -95,12 +144,12 @@ export default function GuestList({
 
   // Create unified list: families and individuals sorted together
   const unifiedList: Array<{ type: 'family'; family: Family } | { type: 'individual'; guest: Guest }> = [];
-  
+
   // Add all families and individuals to the list
   sortedFamilies.forEach(family => {
     unifiedList.push({ type: 'family', family });
   });
-  
+
   individualGuests.forEach(guest => {
     unifiedList.push({ type: 'individual', guest });
   });
@@ -109,43 +158,89 @@ export default function GuestList({
   unifiedList.sort((a, b) => {
     let aLastName: string;
     let bLastName: string;
-    
+
     if (a.type === 'family') {
       aLastName = familyLastNameMap.get(a.family.id) || '';
     } else {
       aLastName = a.guest.lastName;
     }
-    
+
     if (b.type === 'family') {
       bLastName = familyLastNameMap.get(b.family.id) || '';
     } else {
       bLastName = b.guest.lastName;
     }
-    
+
     return aLastName.localeCompare(bLastName);
   });
 
   // Calculate total unique guests (filtered)
   const totalGuests = filteredGuests.length;
 
+  // Get selected guests for bulk operations
+  const selectedGuests = filteredGuests.filter(g => selectedGuestIds.has(g.id));
+
+  // Check if all filtered guests are selected
+  const allSelected = filteredGuests.length > 0 && filteredGuests.every(g => selectedGuestIds.has(g.id));
+  const someSelected = selectedGuestIds.size > 0;
+
   return (
     <div className="guest-list">
-      <div className="guest-list-controls">
-        <button
-          className={`remove-mode-toggle ${removeMode ? 'active' : ''}`}
-          onClick={() => setRemoveMode(!removeMode)}
-        >
-          {removeMode ? '✓ Remove Guests Ready' : 'Remove Guests'}
-        </button>
-      </div>
-      
+      {!readOnly && (
+        <div className="guest-list-controls">
+          <button
+            className={`selection-mode-toggle ${selectionMode ? 'active' : ''}`}
+            onClick={toggleSelectionMode}
+          >
+            {selectionMode ? 'Done Selecting' : 'Select Guests'}
+          </button>
+
+          {selectionMode && filteredGuests.length > 0 && (
+            <div className="select-all-controls">
+              {!allSelected ? (
+                <button
+                  className="select-all-button"
+                  onClick={() => setSelectedGuestIds(new Set(filteredGuests.map(g => g.id)))}
+                >
+                  Select All ({filteredGuests.length})
+                </button>
+              ) : (
+                <button
+                  className="deselect-all-button"
+                  onClick={handleDeselectAll}
+                >
+                  Deselect All
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Bulk action bar - shown when guests are selected */}
+      {selectionMode && someSelected && (
+        <div className="bulk-action-bar">
+          <span className="selection-count">
+            {selectedGuestIds.size} guest{selectedGuestIds.size !== 1 ? 's' : ''} selected
+          </span>
+          <div className="bulk-actions">
+            <button
+              className="bulk-events-button"
+              onClick={() => setShowBulkEventsModal(true)}
+            >
+              Manage Events
+            </button>
+          </div>
+        </div>
+      )}
+
       {filteredGuests.length === 0 ? (
         <div className="empty-state">
           <p>
             {searchTerm.trim()
               ? `No guests or families found matching "${searchTerm}".`
               : selectedCategories.length > 0
-              ? `No guests found in selected categories.` 
+              ? `No guests found in selected categories.`
               : 'No guests yet. Add your first guest to get started!'}
           </p>
         </div>
@@ -161,17 +256,30 @@ export default function GuestList({
                   allGuests={safeGuests}
                   categories={categories}
                   onUpdate={onUpdate}
-                  removeMode={removeMode}
+                  eventId={eventId}
+                  readOnly={readOnly}
+                  events={events}
+                  guestPresence={guestPresence}
+                  selectionMode={selectionMode}
+                  selectedGuestIds={selectedGuestIds}
+                  onSelectionChange={handleSelectionChange}
+                  onFamilySelectionChange={handleFamilySelectionChange}
                 />
               );
             } else {
               return (
-                <GuestItem 
-                  key={item.guest.id} 
+                <GuestItem
+                  key={item.guest.id}
                   guest={item.guest}
                   categories={categories}
                   onUpdate={onUpdate}
-                  removeMode={removeMode}
+                  eventId={eventId}
+                  readOnly={readOnly}
+                  events={events}
+                  guestPresence={guestPresence[item.guest.id]}
+                  selectionMode={selectionMode}
+                  isSelected={selectedGuestIds.has(item.guest.id)}
+                  onSelectionChange={handleSelectionChange}
                 />
               );
             }
@@ -180,6 +288,17 @@ export default function GuestList({
             <p>Total Guests: <strong>{totalGuests}</strong></p>
           </div>
         </>
+      )}
+
+      {showBulkEventsModal && (
+        <BulkEventsModal
+          selectedGuests={selectedGuests}
+          events={events}
+          currentEventId={eventId}
+          guestPresenceMap={guestPresence}
+          onClose={() => setShowBulkEventsModal(false)}
+          onSuccess={handleBulkActionComplete}
+        />
       )}
     </div>
   );

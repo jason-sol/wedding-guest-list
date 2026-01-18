@@ -1,0 +1,190 @@
+.event-settings-modal {
+  max-width: 500px;
+  width: 90%;
+}
+
+.event-settings-modal .form-group {
+  margin-bottom: 20px;
+}
+
+.event-settings-modal .form-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.event-settings-modal .form-group input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.event-settings-modal .form-group input:focus {
+  outline: none;
+  border-color: #4CAF50;
+}
+
+.event-settings-modal .form-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.form-actions-right {
+  display: flex;
+  gap: 12px;
+}
+
+.event-settings-modal button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.event-settings-modal button[type="submit"] {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.event-settings-modal button[type="submit"]:hover {
+  background-color: #45a049;
+}
+
+.event-settings-modal button[type="submit"]:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.event-settings-modal button[type="button"] {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.event-settings-modal button[type="button"]:hover {
+  background-color: #e0e0e0;
+}
+
+.delete-event-button {
+  background-color: #ffebee !important;
+  color: #c62828 !important;
+}
+
+.delete-event-button:hover {
+  background-color: #ffcdd2 !important;
+}
+
+/* Delete Confirmation Dialog */
+.delete-confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.delete-confirm-dialog {
+  background: white;
+  padding: 24px;
+  border-radius: 8px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.delete-confirm-dialog h3 {
+  margin: 0 0 16px 0;
+  color: #c62828;
+}
+
+.delete-confirm-dialog p {
+  margin: 0 0 12px 0;
+  color: #333;
+}
+
+.delete-warning {
+  background: #ffebee;
+  padding: 12px;
+  border-radius: 4px;
+  color: #c62828;
+  font-size: 14px;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.confirm-delete-button {
+  background-color: #c62828 !important;
+  color: white !important;
+}
+
+.confirm-delete-button:hover {
+  background-color: #b71c1c !important;
+}
+
+/* Reconstruct Families Section */
+.reconstruct-section {
+  background: #f5f5f5;
+  padding: 16px;
+  border-radius: 8px;
+  margin-top: 8px;
+}
+
+.reconstruct-section .help-text {
+  font-size: 13px;
+  color: #666;
+  margin: 0 0 12px 0;
+  line-height: 1.4;
+}
+
+.reconstruct-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.reconstruct-controls select {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+  background: white;
+}
+
+.reconstruct-controls select:focus {
+  outline: none;
+  border-color: #4CAF50;
+}
+
+.reconstruct-button {
+  padding: 8px 16px !important;
+  background-color: #2196F3 !important;
+  color: white !important;
+}
+
+.reconstruct-button:hover:not(:disabled) {
+  background-color: #1976D2 !important;
+}
+
+.reconstruct-button:disabled {
+  background-color: #ccc !important;
+  cursor: not-allowed;
+}

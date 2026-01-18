@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { login } from '../api';
 import './Login.css';
 
 interface LoginProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess: (username: string, password: string) => Promise<void>;
 }
 
 export default function Login({ onLoginSuccess }: LoginProps) {
@@ -18,8 +17,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setIsLoading(true);
 
     try {
-      await login(username, password);
-      onLoginSuccess();
+      await onLoginSuccess(username, password);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid username or password');
     } finally {

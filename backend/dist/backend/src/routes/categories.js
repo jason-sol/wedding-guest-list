@@ -4,28 +4,27 @@ const express_1 = require("express");
 const store_1 = require("../store");
 const colors_1 = require("../../../shared/utils/colors");
 const capitalize_1 = require("../../../shared/utils/capitalize");
+const validation_1 = require("../validation");
+const apiResponse_1 = require("../apiResponse");
 const router = (0, express_1.Router)();
 // GET /api/categories - Get all categories
 router.get('/', (req, res) => {
     const categories = store_1.store.getAllCategories();
-    res.json(categories);
+    (0, apiResponse_1.sendSuccess)(res, categories);
 });
 // POST /api/categories - Add a new category
 router.post('/', (req, res) => {
-    const { name } = req.body;
-    if (!name || !name.trim()) {
-        return res.status(400).json({
-            error: 'Category name is required'
-        });
+    const validation = (0, validation_1.validate)(validation_1.CreateCategorySchema, req.body);
+    if (!validation.success) {
+        return (0, apiResponse_1.sendValidationError)(res, validation.error, validation.details);
     }
+    const { name } = validation.data;
     // Capitalize the category name
-    const capitalizedName = (0, capitalize_1.capitalizeWords)(name.trim());
+    const capitalizedName = (0, capitalize_1.capitalizeWords)(name);
     // Check if category already exists
     const existingCategories = store_1.store.getAllCategories();
     if (existingCategories.some(c => c.name.toLowerCase() === capitalizedName.toLowerCase())) {
-        return res.status(400).json({
-            error: 'Category already exists'
-        });
+        return (0, apiResponse_1.sendValidationError)(res, 'Category already exists');
     }
     // Get all existing colors to avoid duplicates
     const existingColors = existingCategories.map(c => c.color);
@@ -35,7 +34,7 @@ router.post('/', (req, res) => {
         color: assignedColor,
     };
     const added = store_1.store.addCategory(category);
-    res.status(201).json(added);
+    (0, apiResponse_1.sendCreated)(res, added);
 });
 // DELETE /api/categories/:name - Delete a category
 router.delete('/:name', (req, res) => {
@@ -43,7 +42,7 @@ router.delete('/:name', (req, res) => {
     // Check if category exists
     const category = store_1.store.getCategory(categoryName);
     if (!category) {
-        return res.status(404).json({ error: 'Category not found' });
+        return (0, apiResponse_1.sendNotFound)(res, 'Category');
     }
     // Remove this category from all guests
     const allGuests = store_1.store.getAllGuests();
@@ -57,8 +56,8 @@ router.delete('/:name', (req, res) => {
     // Delete the category
     const deleted = store_1.store.deleteCategory(categoryName);
     if (!deleted) {
-        return res.status(500).json({ error: 'Failed to delete category' });
+        return (0, apiResponse_1.sendServerError)(res, 'Failed to delete category');
     }
-    res.status(204).send();
+    (0, apiResponse_1.sendNoContent)(res);
 });
 exports.default = router;

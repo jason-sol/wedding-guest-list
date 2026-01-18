@@ -1,27 +1,41 @@
 import { Request, Response, NextFunction } from 'express';
-import { sessions } from '../routes/auth';
+import { getSessionStore } from '../sessionStore';
+import { sendUnauthorized } from '../apiResponse';
+
+// Extend Express Request type to include user property
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        userId: string;
+        username: string;
+        isOwner: boolean;
+      };
+    }
+  }
+}
 
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authentication required' });
+    return sendUnauthorized(res, 'Authentication required');
   }
 
   const token = authHeader.substring(7);
-  const session = sessions.get(token);
+  const sessionStore = getSessionStore();
+  const session = sessionStore.get(token);
 
+  // Session expiry is handled by sessionStore.get()
   if (!session) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    return sendUnauthorized(res, 'Invalid or expired token');
   }
 
-  // Check if session expired
-  if (session.expiresAt < Date.now()) {
-    sessions.delete(token);
-    return res.status(401).json({ error: 'Session expired' });
-  }
-
-  // Attach user info to request
-  (req as any).user = { username: session.username };
+  // Attach user info to request (now properly typed)
+  req.user = {
+    userId: session.userId,
+    username: session.username,
+    isOwner: session.isOwner,
+  };
   next();
 }

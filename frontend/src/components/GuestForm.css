@@ -244,3 +244,62 @@
   font-weight: 500;
   margin-left: 16px;
 }
+
+/* Event checkboxes for adding to multiple events */
+.event-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.event-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: white;
+  border-radius: 20px;
+  cursor: pointer;
+  border: 1px solid #ddd;
+  transition: all 0.2s;
+}
+
+.event-checkbox:hover {
+  border-color: #4CAF50;
+  background: #f0fff0;
+}
+
+.event-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  margin: 0;
+  accent-color: #4CAF50;
+}
+
+.event-checkbox input[type="checkbox"]:checked + span {
+  color: #4CAF50;
+  font-weight: 600;
+}
+
+.event-checkbox span {
+  font-size: 14px;
+  color: #333;
+}
+
+.event-checkbox.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.event-checkbox.disabled input[type="checkbox"] {
+  cursor: not-allowed;
+}
+
+.event-checkbox.disabled span {
+  color: #666;
+}

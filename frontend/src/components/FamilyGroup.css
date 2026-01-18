@@ -77,3 +77,18 @@
   gap: 8px;
   padding-left: 24px;
 }
+
+/* Family checkbox for selection mode */
+.family-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  margin-right: 12px;
+  flex-shrink: 0;
+  accent-color: #4CAF50;
+}
+
+.family-group.has-selection {
+  border-color: #81C784;
+  background-color: #F1F8E9;
+}

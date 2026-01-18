@@ -1,4 +1,4 @@
-import { Guest, Family, CategoryInfo } from './types';
+import { Guest, Family, CategoryInfo, Event, UserEventPermission, PermissionLevel } from './types';
 
 const API_BASE = '/api';
 
@@ -20,39 +20,49 @@ function handleAuthError(response: Response): void {
   }
 }
 
-export async function fetchGuests(): Promise<Guest[]> {
-  const response = await fetch(`${API_BASE}/guests`, {
+// Helper to extract data from standardized API response format
+async function extractData<T>(response: Response): Promise<T> {
+  const result = await response.json();
+  return result.data !== undefined ? result.data : result;
+}
+
+// ============================================================
+// Event-scoped Guest operations
+// ============================================================
+
+export async function fetchGuests(eventId: string): Promise<Guest[]> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/guests`, {
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
   if (!response.ok) throw new Error('Failed to fetch guests');
-  return response.json();
+  return extractData<Guest[]>(response);
 }
 
-export async function addGuest(guest: Omit<Guest, 'id'>): Promise<Guest> {
-  const response = await fetch(`${API_BASE}/guests`, {
+export async function addGuest(eventId: string, guest: Omit<Guest, 'id' | 'eventId'>): Promise<Guest> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/guests`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify(guest),
   });
   handleAuthError(response);
   if (!response.ok) throw new Error('Failed to add guest');
-  return response.json();
+  return extractData<Guest>(response);
 }
 
-export async function updateGuest(id: string, updates: Partial<Guest>): Promise<Guest> {
-  const response = await fetch(`${API_BASE}/guests/${id}`, {
+export async function updateGuest(eventId: string, guestId: string, updates: Partial<Guest>): Promise<Guest> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/guests/${guestId}`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(updates),
   });
   handleAuthError(response);
   if (!response.ok) throw new Error('Failed to update guest');
-  return response.json();
+  return extractData<Guest>(response);
 }
 
-export async function deleteGuest(id: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/guests/${id}`, {
+export async function deleteGuest(eventId: string, guestId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/guests/${guestId}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
@@ -60,74 +70,106 @@ export async function deleteGuest(id: string): Promise<void> {
   if (!response.ok) throw new Error('Failed to delete guest');
 }
 
-export async function fetchFamilies(): Promise<Family[]> {
-  const response = await fetch(`${API_BASE}/families`, {
+export async function copyGuest(eventId: string, guestId: string, targetEventId: string): Promise<Guest> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/guests/${guestId}/copy`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ targetEventId }),
+  });
+  handleAuthError(response);
+  if (!response.ok) throw new Error('Failed to copy guest');
+  return extractData<Guest>(response);
+}
+
+export interface GuestPresenceInfo {
+  id: string;      // Event ID
+  name: string;    // Event name
+  guestId: string; // Guest ID in that event
+}
+
+export type GuestPresenceMap = Record<string, GuestPresenceInfo[]>;
+
+export async function fetchGuestPresence(eventId: string): Promise<GuestPresenceMap> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/guests/presence`, {
+    headers: getAuthHeaders(),
+  });
+  handleAuthError(response);
+  if (!response.ok) throw new Error('Failed to fetch guest presence');
+  return extractData<GuestPresenceMap>(response);
+}
+
+// ============================================================
+// Event-scoped Family operations
+// ============================================================
+
+export async function fetchFamilies(eventId: string): Promise<Family[]> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/families`, {
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
   if (!response.ok) throw new Error('Failed to fetch families');
-  return response.json();
+  return extractData<Family[]>(response);
 }
 
-export async function addFamily(data: {
+export async function addFamily(eventId: string, data: {
   name: string;
-  members: Array<{ firstName: string; lastName: string; tags?: string[] }>;
+  members: Array<{ firstName?: string; lastName?: string; tags?: string[] } | string>;
 }): Promise<Family> {
-  const response = await fetch(`${API_BASE}/families`, {
+  const response = await fetch(`${API_BASE}/events/${eventId}/families`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
   handleAuthError(response);
   if (!response.ok) throw new Error('Failed to add family');
-  return response.json();
+  return extractData<Family>(response);
 }
 
-export async function addGuestToFamily(familyId: string, guestId: string): Promise<Family> {
-  const response = await fetch(`${API_BASE}/families/${familyId}/members`, {
+export async function addGuestToFamily(eventId: string, familyId: string, guestId: string): Promise<Family> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/families/${familyId}/members`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify({ guestId }),
   });
   handleAuthError(response);
   if (!response.ok) throw new Error('Failed to add guest to family');
-  return response.json();
+  return extractData<Family>(response);
 }
 
-export async function removeGuestFromFamily(familyId: string, guestId: string): Promise<Family> {
-  const response = await fetch(`${API_BASE}/families/${familyId}/members/${guestId}`, {
+export async function removeGuestFromFamily(eventId: string, familyId: string, guestId: string): Promise<Family> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/families/${familyId}/members/${guestId}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
   if (!response.ok) throw new Error('Failed to remove guest from family');
-  return response.json();
+  return extractData<Family>(response);
 }
 
-export async function updateFamily(id: string, updates: Partial<Family>): Promise<Family> {
-  const response = await fetch(`${API_BASE}/families/${id}`, {
+export async function updateFamily(eventId: string, familyId: string, updates: Partial<Family>): Promise<Family> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/families/${familyId}`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(updates),
   });
   handleAuthError(response);
   if (!response.ok) throw new Error('Failed to update family');
-  return response.json();
+  return extractData<Family>(response);
 }
 
-export async function reorderFamilyMembers(familyId: string, memberIds: string[]): Promise<Family> {
-  const response = await fetch(`${API_BASE}/families/${familyId}/members/reorder`, {
+export async function reorderFamilyMembers(eventId: string, familyId: string, memberIds: string[]): Promise<Family> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/families/${familyId}/members/reorder`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify({ memberIds }),
   });
   handleAuthError(response);
   if (!response.ok) throw new Error('Failed to reorder family members');
-  return response.json();
+  return extractData<Family>(response);
 }
 
-export async function deleteFamily(id: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/families/${id}`, {
+export async function deleteFamily(eventId: string, familyId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/families/${familyId}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
@@ -135,13 +177,28 @@ export async function deleteFamily(id: string): Promise<void> {
   if (!response.ok) throw new Error('Failed to delete family');
 }
 
+export async function copyFamily(eventId: string, familyId: string, targetEventId: string): Promise<{ family: Family; guests: Guest[] }> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/families/${familyId}/copy`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ targetEventId }),
+  });
+  handleAuthError(response);
+  if (!response.ok) throw new Error('Failed to copy family');
+  return extractData<{ family: Family; guests: Guest[] }>(response);
+}
+
+// ============================================================
+// Category operations (global - not event-scoped)
+// ============================================================
+
 export async function fetchCategories(): Promise<CategoryInfo[]> {
   const response = await fetch(`${API_BASE}/categories`, {
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
   if (!response.ok) throw new Error('Failed to fetch categories');
-  return response.json();
+  return extractData<CategoryInfo[]>(response);
 }
 
 export async function addCategory(name: string): Promise<CategoryInfo> {
@@ -152,7 +209,7 @@ export async function addCategory(name: string): Promise<CategoryInfo> {
   });
   handleAuthError(response);
   if (!response.ok) throw new Error('Failed to add category');
-  return response.json();
+  return extractData<CategoryInfo>(response);
 }
 
 export async function deleteCategory(name: string): Promise<void> {
@@ -164,8 +221,188 @@ export async function deleteCategory(name: string): Promise<void> {
   if (!response.ok) throw new Error('Failed to delete category');
 }
 
-// Authentication functions
-export async function login(username: string, password: string): Promise<{ token: string }> {
+// ============================================================
+// Event operations
+// ============================================================
+
+export interface EventWithPermission extends Event {
+  permission: PermissionLevel;
+}
+
+export async function fetchEvents(): Promise<EventWithPermission[]> {
+  const response = await fetch(`${API_BASE}/events`, {
+    headers: getAuthHeaders(),
+  });
+  handleAuthError(response);
+  if (!response.ok) throw new Error('Failed to fetch events');
+  return extractData<EventWithPermission[]>(response);
+}
+
+export async function createEvent(data: { name: string; date?: string; location?: string }): Promise<Event> {
+  const response = await fetch(`${API_BASE}/events`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  handleAuthError(response);
+  if (!response.ok) throw new Error('Failed to create event');
+  return extractData<Event>(response);
+}
+
+export async function updateEvent(eventId: string, updates: Partial<Event>): Promise<Event> {
+  const response = await fetch(`${API_BASE}/events/${eventId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(updates),
+  });
+  handleAuthError(response);
+  if (!response.ok) throw new Error('Failed to update event');
+  return extractData<Event>(response);
+}
+
+export async function deleteEvent(eventId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/events/${eventId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  handleAuthError(response);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || 'Failed to delete event');
+  }
+}
+
+export async function reorderEvents(eventIds: string[]): Promise<Event[]> {
+  const response = await fetch(`${API_BASE}/events/reorder`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ eventIds }),
+  });
+  handleAuthError(response);
+  if (!response.ok) throw new Error('Failed to reorder events');
+  return extractData<Event[]>(response);
+}
+
+export interface ReconstructFamiliesResult {
+  message: string;
+  familiesCreated: number;
+  guestsUpdated: number;
+}
+
+export async function reconstructFamilies(targetEventId: string, sourceEventId: string): Promise<ReconstructFamiliesResult> {
+  const response = await fetch(`${API_BASE}/events/${targetEventId}/reconstruct-families`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ sourceEventId }),
+  });
+  handleAuthError(response);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || 'Failed to reconstruct families');
+  }
+  return extractData<ReconstructFamiliesResult>(response);
+}
+
+// ============================================================
+// Event Permission operations (owner only)
+// ============================================================
+
+export interface EventPermission {
+  userId: string;
+  username: string;
+  eventId: string;
+  permission: PermissionLevel;
+}
+
+export async function fetchEventPermissions(eventId: string): Promise<EventPermission[]> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/permissions`, {
+    headers: getAuthHeaders(),
+  });
+  handleAuthError(response);
+  if (!response.ok) throw new Error('Failed to fetch event permissions');
+  return extractData<EventPermission[]>(response);
+}
+
+export async function setEventPermission(eventId: string, userId: string, permission: PermissionLevel): Promise<UserEventPermission> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/permissions/${userId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ permission }),
+  });
+  handleAuthError(response);
+  if (!response.ok) throw new Error('Failed to set event permission');
+  return extractData<UserEventPermission>(response);
+}
+
+// ============================================================
+// User operations (owner only)
+// ============================================================
+
+export interface SafeUser {
+  id: string;
+  username: string;
+  isOwner: boolean;
+  createdAt: number;
+  createdBy: string;
+}
+
+export async function fetchUsers(): Promise<SafeUser[]> {
+  const response = await fetch(`${API_BASE}/users`, {
+    headers: getAuthHeaders(),
+  });
+  handleAuthError(response);
+  if (!response.ok) throw new Error('Failed to fetch users');
+  return extractData<SafeUser[]>(response);
+}
+
+export async function createUser(username: string, password: string): Promise<SafeUser> {
+  const response = await fetch(`${API_BASE}/users`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ username, password }),
+  });
+  handleAuthError(response);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || 'Failed to create user');
+  }
+  return extractData<SafeUser>(response);
+}
+
+export async function updateUser(userId: string, password: string): Promise<SafeUser> {
+  const response = await fetch(`${API_BASE}/users/${userId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ password }),
+  });
+  handleAuthError(response);
+  if (!response.ok) throw new Error('Failed to update user');
+  return extractData<SafeUser>(response);
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/users/${userId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  handleAuthError(response);
+  if (!response.ok) throw new Error('Failed to delete user');
+}
+
+export async function fetchUserPermissions(userId: string): Promise<UserEventPermission[]> {
+  const response = await fetch(`${API_BASE}/users/${userId}/permissions`, {
+    headers: getAuthHeaders(),
+  });
+  handleAuthError(response);
+  if (!response.ok) throw new Error('Failed to fetch user permissions');
+  return extractData<UserEventPermission[]>(response);
+}
+
+// ============================================================
+// Authentication functions (kept for backwards compatibility)
+// ============================================================
+
+export async function login(username: string, password: string): Promise<{ token: string; userId: string; username: string; isOwner: boolean }> {
   const response = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -175,8 +412,8 @@ export async function login(username: string, password: string): Promise<{ token
     const error = await response.json().catch(() => ({ error: 'Invalid username or password' }));
     throw new Error(error.error || 'Invalid username or password');
   }
-  const data = await response.json();
-  // Store token in localStorage
+  const result = await response.json();
+  const data = result.data || result;
   if (data.token) {
     localStorage.setItem('authToken', data.token);
   }
@@ -189,9 +426,9 @@ export async function logout(): Promise<void> {
     try {
       await fetch(`${API_BASE}/auth/logout`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
         },
       });
     } catch (error) {
@@ -204,7 +441,7 @@ export async function logout(): Promise<void> {
 export async function checkAuth(): Promise<boolean> {
   const token = localStorage.getItem('authToken');
   if (!token) return false;
-  
+
   try {
     const response = await fetch(`${API_BASE}/auth/check`, {
       method: 'GET',
@@ -225,7 +462,10 @@ export function getAuthToken(): string | null {
   return localStorage.getItem('authToken');
 }
 
-// Export data
+// ============================================================
+// Data Import/Export (owner only)
+// ============================================================
+
 export async function exportData(): Promise<Blob> {
   const response = await fetch(`${API_BASE}/data/export`, {
     method: 'GET',
@@ -236,11 +476,20 @@ export async function exportData(): Promise<Blob> {
   return response.blob();
 }
 
-// Import data
-export async function importData(file: File): Promise<{ message: string; imported: { guests: number; families: number; categories: number } }> {
+export async function importData(file: File): Promise<{
+  message: string;
+  imported: {
+    guests: number;
+    families: number;
+    categories: number;
+    users: number;
+    events: number;
+    permissions: number;
+  };
+}> {
   const fileContent = await file.text();
   const data = JSON.parse(fileContent);
-  
+
   const response = await fetch(`${API_BASE}/data/import`, {
     method: 'POST',
     headers: getAuthHeaders(),
@@ -251,5 +500,15 @@ export async function importData(file: File): Promise<{ message: string; importe
     const errorData = await response.json();
     throw new Error(errorData.error || 'Failed to import data');
   }
-  return response.json();
+  return extractData<{
+    message: string;
+    imported: {
+      guests: number;
+      families: number;
+      categories: number;
+      users: number;
+      events: number;
+      permissions: number;
+    };
+  }>(response);
 }

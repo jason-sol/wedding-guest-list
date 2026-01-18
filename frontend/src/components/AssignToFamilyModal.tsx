@@ -5,12 +5,14 @@ import './AssignToFamilyModal.css';
 
 interface AssignToFamilyModalProps {
   guest: Guest;
+  eventId: string;
   onClose: () => void;
   onSuccess: () => void;
 }
 
 export default function AssignToFamilyModal({
   guest,
+  eventId,
   onClose,
   onSuccess,
 }: AssignToFamilyModalProps) {
@@ -20,11 +22,11 @@ export default function AssignToFamilyModal({
 
   useEffect(() => {
     loadFamilies();
-  }, []);
+  }, [eventId]);
 
   const loadFamilies = async () => {
     try {
-      const data = await fetchFamilies();
+      const data = await fetchFamilies(eventId);
       setFamilies(data);
     } catch (error) {
       console.error('Failed to load families:', error);
@@ -33,7 +35,7 @@ export default function AssignToFamilyModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!selectedFamilyId) {
       alert('Please select a family');
       return;
@@ -41,7 +43,7 @@ export default function AssignToFamilyModal({
 
     setIsSubmitting(true);
     try {
-      await addGuestToFamily(selectedFamilyId, guest.id);
+      await addGuestToFamily(eventId, selectedFamilyId, guest.id);
       onSuccess();
     } catch (error) {
       console.error('Failed to assign guest to family:', error);

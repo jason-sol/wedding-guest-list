@@ -4,4 +4,10 @@ export type {
   Family,
   Category,
   CategoryInfo,
+  Event,
+  User,
+  UserEventPermission,
+  PermissionLevel,
+  AuthUser,
+  RSVPStatus,
 } from '../../shared/types/index';

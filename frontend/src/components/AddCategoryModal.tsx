@@ -8,9 +8,10 @@ interface AddCategoryModalProps {
   onClose: () => void;
   onSuccess: () => void;
   categories: CategoryInfo[];
+  readOnly?: boolean;
 }
 
-export default function AddCategoryModal({ onClose, onSuccess, categories }: AddCategoryModalProps) {
+export default function AddCategoryModal({ onClose, onSuccess, categories, readOnly = false }: AddCategoryModalProps) {
   const [categoryName, setCategoryName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingCategories, setDeletingCategories] = useState<Set<string>>(new Set());
@@ -76,33 +77,35 @@ export default function AddCategoryModal({ onClose, onSuccess, categories }: Add
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Add/Remove Category</h2>
+          <h2>{readOnly ? 'View Categories' : 'Add/Remove Category'}</h2>
           <button className="close-button" onClick={onClose}>×</button>
         </div>
-        
+
         <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="categoryName">Category Name *</label>
-            <input
-              id="categoryName"
-              type="text"
-              value={categoryName}
-              onChange={(e) => setCategoryName(e.target.value)}
-              required
-              autoFocus
-              placeholder="e.g., Work Friends"
-              className={isDuplicate ? 'input-error' : ''}
-            />
-            {isDuplicate && (
-              <div className="error-message" style={{ marginTop: '8px', fontSize: '14px', color: '#d32f2f' }}>
-                This category already exists
-              </div>
-            )}
-          </div>
+          {!readOnly && (
+            <div className="form-group">
+              <label htmlFor="categoryName">Category Name *</label>
+              <input
+                id="categoryName"
+                type="text"
+                value={categoryName}
+                onChange={(e) => setCategoryName(e.target.value)}
+                required
+                autoFocus
+                placeholder="e.g., Work Friends"
+                className={isDuplicate ? 'input-error' : ''}
+              />
+              {isDuplicate && (
+                <div className="error-message" style={{ marginTop: '8px', fontSize: '14px', color: '#d32f2f' }}>
+                  This category already exists
+                </div>
+              )}
+            </div>
+          )}
 
           {categories.length > 0 && (
             <div className="form-group">
-              <label>Existing Categories (click × to remove)</label>
+              <label>{readOnly ? 'Existing Categories' : 'Existing Categories (click × to remove)'}</label>
               <div className="existing-categories">
                 {categories.map((cat) => (
                   <div key={cat.name} className="category-item-with-delete">
@@ -110,28 +113,38 @@ export default function AddCategoryModal({ onClose, onSuccess, categories }: Add
                       category={cat.name}
                       categoryInfo={cat}
                     />
-                    <button
-                      type="button"
-                      className="delete-category-button"
-                      onClick={() => handleDeleteCategory(cat.name)}
-                      disabled={deletingCategories.has(cat.name)}
-                      aria-label={`Delete ${cat.name} category`}
-                    >
-                      {deletingCategories.has(cat.name) ? '...' : '×'}
-                    </button>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        className="delete-category-button"
+                        onClick={() => handleDeleteCategory(cat.name)}
+                        disabled={deletingCategories.has(cat.name)}
+                        aria-label={`Delete ${cat.name} category`}
+                      >
+                        {deletingCategories.has(cat.name) ? '...' : '×'}
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           )}
 
+          {categories.length === 0 && (
+            <div className="form-group">
+              <p style={{ color: '#666' }}>No categories have been created yet.</p>
+            </div>
+          )}
+
           <div className="form-actions">
             <button type="button" onClick={onClose} disabled={isSubmitting}>
-              Cancel
+              {readOnly ? 'Close' : 'Cancel'}
             </button>
-            <button type="submit" disabled={isSubmitting || isDuplicate}>
-              {isSubmitting ? 'Adding...' : 'Add Category'}
-            </button>
+            {!readOnly && (
+              <button type="submit" disabled={isSubmitting || isDuplicate}>
+                {isSubmitting ? 'Adding...' : 'Add Category'}
+              </button>
+            )}
           </div>
         </form>
       </div>

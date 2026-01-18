@@ -1,23 +1,25 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authMiddleware = authMiddleware;
-const auth_1 = require("../routes/auth");
+const sessionStore_1 = require("../sessionStore");
+const apiResponse_1 = require("../apiResponse");
 function authMiddleware(req, res, next) {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Authentication required' });
+        return (0, apiResponse_1.sendUnauthorized)(res, 'Authentication required');
     }
     const token = authHeader.substring(7);
-    const session = auth_1.sessions.get(token);
+    const sessionStore = (0, sessionStore_1.getSessionStore)();
+    const session = sessionStore.get(token);
+    // Session expiry is handled by sessionStore.get()
     if (!session) {
-        return res.status(401).json({ error: 'Invalid or expired token' });
+        return (0, apiResponse_1.sendUnauthorized)(res, 'Invalid or expired token');
     }
-    // Check if session expired
-    if (session.expiresAt < Date.now()) {
-        auth_1.sessions.delete(token);
-        return res.status(401).json({ error: 'Session expired' });
-    }
-    // Attach user info to request
-    req.user = { username: session.username };
+    // Attach user info to request (now properly typed)
+    req.user = {
+        userId: session.userId,
+        username: session.username,
+        isOwner: session.isOwner,
+    };
     next();
 }
