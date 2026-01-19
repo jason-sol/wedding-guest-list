@@ -116,6 +116,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               autoFocus
               disabled={isLoading}
               sx={{ mb: 2.5 }}
+              slotProps={{ htmlInput: { maxLength: 50 } }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -135,6 +136,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               required
               disabled={isLoading}
               sx={{ mb: 3 }}
+              slotProps={{ htmlInput: { maxLength: 100 } }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">

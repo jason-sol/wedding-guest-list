@@ -182,6 +182,18 @@ router.put('/:id/members/reorder', requireEventAdmin, (req: Request, res: Respon
     return sendValidationError(res, `Invalid member IDs: ${invalidIds.join(', ')}`);
   }
 
+  // Validate all original members are included (prevent accidental member loss)
+  const missingIds = family.members.filter(id => !memberIds.includes(id));
+  if (missingIds.length > 0) {
+    return sendValidationError(res, `Missing family members: ${missingIds.join(', ')}. All members must be included when reordering.`);
+  }
+
+  // Validate no duplicates
+  const uniqueIds = new Set(memberIds);
+  if (uniqueIds.size !== memberIds.length) {
+    return sendValidationError(res, 'Duplicate member IDs are not allowed');
+  }
+
   // Update family with new member order
   const updated = store.updateFamily(req.params.id, { members: memberIds });
 

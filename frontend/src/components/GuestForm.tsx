@@ -127,6 +127,7 @@ export default function GuestForm({
               placeholder="Optional"
               autoFocus
               disabled={isSubmitting}
+              slotProps={{ htmlInput: { maxLength: 100 } }}
             />
             <TextField
               fullWidth
@@ -136,6 +137,7 @@ export default function GuestForm({
               onChange={(e) => setLastName(e.target.value)}
               placeholder="Optional"
               disabled={isSubmitting}
+              slotProps={{ htmlInput: { maxLength: 100 } }}
             />
           </Box>
 

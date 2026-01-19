@@ -278,6 +278,7 @@ export default function UserManagement({ onClose }: UserManagementProps) {
                   onChange={e => setNewUsername(e.target.value)}
                   disabled={isCreating}
                   autoFocus
+                  slotProps={{ htmlInput: { maxLength: 50 } }}
                 />
                 <TextField
                   size="small"
@@ -286,6 +287,7 @@ export default function UserManagement({ onClose }: UserManagementProps) {
                   value={newPassword}
                   onChange={e => setNewPassword(e.target.value)}
                   disabled={isCreating}
+                  slotProps={{ htmlInput: { maxLength: 100 } }}
                 />
                 <Button type="submit" variant="contained" disabled={isCreating}>
                   {isCreating ? <CircularProgress size={20} /> : 'Create'}
@@ -327,6 +329,7 @@ export default function UserManagement({ onClose }: UserManagementProps) {
                             value={editPassword}
                             onChange={e => setEditPassword(e.target.value)}
                             disabled={isUpdating}
+                            slotProps={{ htmlInput: { maxLength: 100 } }}
                           />
                           <Button
                             size="small"

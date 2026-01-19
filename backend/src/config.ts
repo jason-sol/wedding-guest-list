@@ -171,6 +171,15 @@ function buildConfig(): Config {
     : [];
   const allowedOrigins = getEnvList('CORS_ALLOWED_ORIGINS', defaultOrigins);
 
+  // Security warning for CORS wildcard in production
+  if (isProduction && allowedOrigins.includes('*')) {
+    console.warn(
+      '\x1b[33m%s\x1b[0m',
+      'SECURITY WARNING: CORS_ALLOWED_ORIGINS is set to "*" (wildcard) in production. ' +
+      'This allows requests from any origin. For better security, specify explicit origins.'
+    );
+  }
+
   // Data file path - resolve relative to backend directory
   const dataDirectory = path.resolve(__dirname, '../../data');
   const dataFilePath = path.join(dataDirectory, 'data.json');

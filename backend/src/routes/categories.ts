@@ -12,6 +12,7 @@ import {
   sendValidationError,
   sendServerError,
 } from '../apiResponse';
+import { requireAdminOrOwner } from '../middleware/permissions';
 
 const router = Router();
 
@@ -21,8 +22,8 @@ router.get('/', (req: Request, res: Response) => {
   sendSuccess(res, categories);
 });
 
-// POST /api/categories - Add a new category
-router.post('/', (req: Request, res: Response) => {
+// POST /api/categories - Add a new category (admin or owner)
+router.post('/', requireAdminOrOwner, (req: Request, res: Response) => {
   const validation = validate(CreateCategorySchema, req.body);
 
   if (!validation.success) {
@@ -53,8 +54,8 @@ router.post('/', (req: Request, res: Response) => {
   sendCreated(res, added);
 });
 
-// PUT /api/categories/:name - Rename a category
-router.put('/:name', (req: Request, res: Response) => {
+// PUT /api/categories/:name - Rename a category (admin or owner)
+router.put('/:name', requireAdminOrOwner, (req: Request, res: Response) => {
   const oldName = decodeURIComponent(req.params.name);
   const { name: newName } = req.body;
 
@@ -86,8 +87,8 @@ router.put('/:name', (req: Request, res: Response) => {
   sendSuccess(res, renamed);
 });
 
-// DELETE /api/categories/:name - Delete a category
-router.delete('/:name', (req: Request, res: Response) => {
+// DELETE /api/categories/:name - Delete a category (admin or owner)
+router.delete('/:name', requireAdminOrOwner, (req: Request, res: Response) => {
   const categoryName = decodeURIComponent(req.params.name);
 
   // Check if category exists
@@ -96,18 +97,21 @@ router.delete('/:name', (req: Request, res: Response) => {
     return sendNotFound(res, 'Category');
   }
 
+  // Use the actual stored category name for comparisons (case-sensitive match)
+  const actualName = category.name;
+
   // Remove this category from all guests
   const allGuests = store.getAllGuests();
   allGuests.forEach(guest => {
-    if (guest.tags.includes(categoryName)) {
+    if (guest.tags.includes(actualName)) {
       // Remove the category from guest's tags
-      const updatedTags = guest.tags.filter(tag => tag !== categoryName);
+      const updatedTags = guest.tags.filter(tag => tag !== actualName);
       store.updateGuest(guest.id, { tags: updatedTags });
     }
   });
 
   // Delete the category
-  const deleted = store.deleteCategory(categoryName);
+  const deleted = store.deleteCategory(actualName);
 
   if (!deleted) {
     return sendServerError(res, 'Failed to delete category');

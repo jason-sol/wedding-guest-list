@@ -183,6 +183,7 @@ export default function EditGuestForm({
               required
               autoFocus
               disabled={isSubmitting}
+              slotProps={{ htmlInput: { maxLength: 100 } }}
             />
             <TextField
               fullWidth
@@ -192,6 +193,7 @@ export default function EditGuestForm({
               onChange={(e) => setLastName(e.target.value)}
               required
               disabled={isSubmitting}
+              slotProps={{ htmlInput: { maxLength: 100 } }}
             />
           </Box>
 

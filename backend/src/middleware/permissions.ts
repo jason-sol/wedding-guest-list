@@ -89,3 +89,34 @@ export const requireEventAdmin = requireEventPermission('admin');
  * Shorthand for requireEventPermission('viewer').
  */
 export const requireEventViewer = requireEventPermission('viewer');
+
+/**
+ * Middleware to require admin access on at least one event, or owner access.
+ * Used for global resources like categories that aren't event-scoped.
+ */
+export function requireAdminOrOwner(req: Request, res: Response, next: NextFunction): void {
+  if (!req.user) {
+    sendUnauthorized(res, 'Authentication required');
+    return;
+  }
+
+  // Owner has full access
+  if (req.user.isOwner) {
+    next();
+    return;
+  }
+
+  // Check if user has admin permission on any event
+  const events = store.getAllEvents();
+  const hasAdminAccess = events.some(event => {
+    const permission = store.getPermission(req.user!.userId, event.id);
+    return permission === 'admin';
+  });
+
+  if (!hasAdminAccess) {
+    sendForbidden(res, 'Admin access required. You must be an admin on at least one event.');
+    return;
+  }
+
+  next();
+}

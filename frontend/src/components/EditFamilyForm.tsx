@@ -337,6 +337,7 @@ export default function EditFamilyForm({
               required
               autoFocus
               disabled={isSubmitting}
+              slotProps={{ htmlInput: { maxLength: 100 } }}
               sx={{ mb: 3 }}
             />
 

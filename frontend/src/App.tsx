@@ -627,6 +627,7 @@ function App() {
               placeholder="e.g., Ceremony, Reception"
               required
               autoFocus
+              slotProps={{ htmlInput: { maxLength: 100 } }}
             />
           </DialogContent>
           <DialogActions sx={{ px: 3, py: 2 }}>

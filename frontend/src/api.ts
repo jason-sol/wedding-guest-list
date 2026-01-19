@@ -1,5 +1,17 @@
 import { Guest, Family, CategoryInfo, Event, UserEventPermission, PermissionLevel } from './types';
 
+/**
+ * Base URL for all API calls.
+ *
+ * Uses relative path '/api' which works in both environments:
+ * - Development: Vite dev server proxies /api/* to http://localhost:5000
+ *   (configured in vite.config.ts)
+ * - Production: nginx reverse proxy routes /api/* to backend container
+ *   (configured in nginx.conf)
+ *
+ * This keeps frontend code environment-agnostic - no URL changes needed
+ * between development and production builds.
+ */
 const API_BASE = '/api';
 
 // Helper to add auth token to requests
@@ -20,6 +32,28 @@ function handleAuthError(response: Response): void {
   }
 }
 
+/**
+ * Extracts error message from API response.
+ * Backend returns: { success: false, error: string, details?: unknown }
+ */
+async function extractErrorMessage(response: Response, fallbackMessage: string): Promise<string> {
+  try {
+    const result = await response.json();
+    return result.error || fallbackMessage;
+  } catch {
+    return fallbackMessage;
+  }
+}
+
+/**
+ * Handles non-OK responses by extracting server error message and throwing.
+ * Use after handleAuthError() for consistent error handling across all API calls.
+ */
+async function handleErrorResponse(response: Response, fallbackMessage: string): Promise<never> {
+  const message = await extractErrorMessage(response, fallbackMessage);
+  throw new Error(message);
+}
+
 // Helper to extract data from standardized API response format
 async function extractData<T>(response: Response): Promise<T> {
   const result = await response.json();
@@ -35,7 +69,7 @@ export async function fetchGuests(eventId: string): Promise<Guest[]> {
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to fetch guests');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to fetch guests');
   return extractData<Guest[]>(response);
 }
 
@@ -46,7 +80,7 @@ export async function addGuest(eventId: string, guest: Omit<Guest, 'id' | 'event
     body: JSON.stringify(guest),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to add guest');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to add guest');
   return extractData<Guest>(response);
 }
 
@@ -57,7 +91,7 @@ export async function updateGuest(eventId: string, guestId: string, updates: Par
     body: JSON.stringify(updates),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to update guest');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to update guest');
   return extractData<Guest>(response);
 }
 
@@ -67,7 +101,7 @@ export async function deleteGuest(eventId: string, guestId: string): Promise<voi
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to delete guest');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to delete guest');
 }
 
 export async function copyGuest(eventId: string, guestId: string, targetEventId: string): Promise<Guest> {
@@ -77,7 +111,7 @@ export async function copyGuest(eventId: string, guestId: string, targetEventId:
     body: JSON.stringify({ targetEventId }),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to copy guest');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to copy guest');
   return extractData<Guest>(response);
 }
 
@@ -94,7 +128,7 @@ export async function fetchGuestPresence(eventId: string): Promise<GuestPresence
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to fetch guest presence');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to fetch guest presence');
   return extractData<GuestPresenceMap>(response);
 }
 
@@ -107,7 +141,7 @@ export async function fetchFamilies(eventId: string): Promise<Family[]> {
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to fetch families');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to fetch families');
   return extractData<Family[]>(response);
 }
 
@@ -121,7 +155,7 @@ export async function addFamily(eventId: string, data: {
     body: JSON.stringify(data),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to add family');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to add family');
   return extractData<Family>(response);
 }
 
@@ -132,7 +166,7 @@ export async function addGuestToFamily(eventId: string, familyId: string, guestI
     body: JSON.stringify({ guestId }),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to add guest to family');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to add guest to family');
   return extractData<Family>(response);
 }
 
@@ -142,7 +176,7 @@ export async function removeGuestFromFamily(eventId: string, familyId: string, g
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to remove guest from family');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to remove guest from family');
   return extractData<Family>(response);
 }
 
@@ -153,7 +187,7 @@ export async function updateFamily(eventId: string, familyId: string, updates: P
     body: JSON.stringify(updates),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to update family');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to update family');
   return extractData<Family>(response);
 }
 
@@ -164,7 +198,7 @@ export async function reorderFamilyMembers(eventId: string, familyId: string, me
     body: JSON.stringify({ memberIds }),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to reorder family members');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to reorder family members');
   return extractData<Family>(response);
 }
 
@@ -174,7 +208,7 @@ export async function deleteFamily(eventId: string, familyId: string): Promise<v
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to delete family');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to delete family');
 }
 
 export async function copyFamily(eventId: string, familyId: string, targetEventId: string): Promise<{ family: Family; guests: Guest[] }> {
@@ -184,7 +218,7 @@ export async function copyFamily(eventId: string, familyId: string, targetEventI
     body: JSON.stringify({ targetEventId }),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to copy family');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to copy family');
   return extractData<{ family: Family; guests: Guest[] }>(response);
 }
 
@@ -197,7 +231,7 @@ export async function fetchCategories(): Promise<CategoryInfo[]> {
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to fetch categories');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to fetch categories');
   return extractData<CategoryInfo[]>(response);
 }
 
@@ -208,7 +242,7 @@ export async function addCategory(name: string): Promise<CategoryInfo> {
     body: JSON.stringify({ name }),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to add category');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to add category');
   return extractData<CategoryInfo>(response);
 }
 
@@ -218,7 +252,7 @@ export async function deleteCategory(name: string): Promise<void> {
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to delete category');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to delete category');
 }
 
 export async function renameCategory(oldName: string, newName: string): Promise<CategoryInfo> {
@@ -228,10 +262,7 @@ export async function renameCategory(oldName: string, newName: string): Promise<
     body: JSON.stringify({ name: newName }),
   });
   handleAuthError(response);
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Failed to rename category');
-  }
+  if (!response.ok) await handleErrorResponse(response, 'Failed to rename category');
   return extractData<CategoryInfo>(response);
 }
 
@@ -248,7 +279,7 @@ export async function fetchEvents(): Promise<EventWithPermission[]> {
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to fetch events');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to fetch events');
   return extractData<EventWithPermission[]>(response);
 }
 
@@ -259,7 +290,7 @@ export async function createEvent(data: { name: string; date?: string; location?
     body: JSON.stringify(data),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to create event');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to create event');
   return extractData<Event>(response);
 }
 
@@ -270,7 +301,7 @@ export async function updateEvent(eventId: string, updates: Partial<Event>): Pro
     body: JSON.stringify(updates),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to update event');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to update event');
   return extractData<Event>(response);
 }
 
@@ -280,10 +311,7 @@ export async function deleteEvent(eventId: string): Promise<void> {
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Failed to delete event');
-  }
+  if (!response.ok) await handleErrorResponse(response, 'Failed to delete event');
 }
 
 export async function reorderEvents(eventIds: string[]): Promise<Event[]> {
@@ -293,7 +321,7 @@ export async function reorderEvents(eventIds: string[]): Promise<Event[]> {
     body: JSON.stringify({ eventIds }),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to reorder events');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to reorder events');
   return extractData<Event[]>(response);
 }
 
@@ -310,10 +338,7 @@ export async function reconstructFamilies(targetEventId: string, sourceEventId: 
     body: JSON.stringify({ sourceEventId }),
   });
   handleAuthError(response);
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Failed to reconstruct families');
-  }
+  if (!response.ok) await handleErrorResponse(response, 'Failed to reconstruct families');
   return extractData<ReconstructFamiliesResult>(response);
 }
 
@@ -333,7 +358,7 @@ export async function fetchEventPermissions(eventId: string): Promise<EventPermi
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to fetch event permissions');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to fetch event permissions');
   return extractData<EventPermission[]>(response);
 }
 
@@ -344,7 +369,7 @@ export async function setEventPermission(eventId: string, userId: string, permis
     body: JSON.stringify({ permission }),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to set event permission');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to set event permission');
   return extractData<UserEventPermission>(response);
 }
 
@@ -365,7 +390,7 @@ export async function fetchUsers(): Promise<SafeUser[]> {
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to fetch users');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to fetch users');
   return extractData<SafeUser[]>(response);
 }
 
@@ -376,10 +401,7 @@ export async function createUser(username: string, password: string): Promise<Sa
     body: JSON.stringify({ username, password }),
   });
   handleAuthError(response);
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Failed to create user');
-  }
+  if (!response.ok) await handleErrorResponse(response, 'Failed to create user');
   return extractData<SafeUser>(response);
 }
 
@@ -390,7 +412,7 @@ export async function updateUser(userId: string, password: string): Promise<Safe
     body: JSON.stringify({ password }),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to update user');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to update user');
   return extractData<SafeUser>(response);
 }
 
@@ -400,7 +422,7 @@ export async function deleteUser(userId: string): Promise<void> {
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to delete user');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to delete user');
 }
 
 export async function fetchUserPermissions(userId: string): Promise<UserEventPermission[]> {
@@ -408,7 +430,7 @@ export async function fetchUserPermissions(userId: string): Promise<UserEventPer
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to fetch user permissions');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to fetch user permissions');
   return extractData<UserEventPermission[]>(response);
 }
 
@@ -486,7 +508,7 @@ export async function exportData(): Promise<Blob> {
     headers: getAuthHeaders(),
   });
   handleAuthError(response);
-  if (!response.ok) throw new Error('Failed to export data');
+  if (!response.ok) await handleErrorResponse(response, 'Failed to export data');
   return response.blob();
 }
 
@@ -510,10 +532,7 @@ export async function importData(file: File): Promise<{
     body: JSON.stringify(data),
   });
   handleAuthError(response);
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error || 'Failed to import data');
-  }
+  if (!response.ok) await handleErrorResponse(response, 'Failed to import data');
   return extractData<{
     message: string;
     imported: {

@@ -15,15 +15,13 @@ const getValidationLimits = () => getConfig().validation;
 
 /**
  * Sanitizes a string by trimming whitespace and removing potential XSS.
- * Note: This is basic sanitization - for production, consider a proper
- * HTML sanitization library like DOMPurify on the frontend.
  */
 const sanitizedString = (maxLength: number) =>
   z.string()
     .trim()
     .min(1, 'Cannot be empty')
     .max(maxLength, `Cannot exceed ${maxLength} characters`)
-    .transform(s => s.replace(/[<>]/g, '')); // Basic XSS prevention
+    .transform(s => s.replace(/[<>]/g, ''));
 
 /**
  * RSVP status enum.

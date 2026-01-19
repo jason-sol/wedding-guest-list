@@ -140,6 +140,7 @@ export default function EventSettings({
               required
               autoFocus
               disabled={isSubmitting}
+              slotProps={{ htmlInput: { maxLength: 100 } }}
               sx={{ mb: 3 }}
             />
 

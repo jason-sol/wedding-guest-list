@@ -175,6 +175,7 @@ export default function AddCategoryModal({ onClose, onSuccess, categories, readO
               error={isDuplicate}
               helperText={isDuplicate ? 'This category already exists' : ''}
               disabled={isSubmitting}
+              slotProps={{ htmlInput: { maxLength: 50 } }}
             />
           </Box>
         )}
@@ -209,6 +210,7 @@ export default function AddCategoryModal({ onClose, onSuccess, categories, readO
                           disabled={isRenaming}
                           autoFocus
                           sx={{ flex: 1 }}
+                          slotProps={{ htmlInput: { maxLength: 50 } }}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();

@@ -223,6 +223,7 @@ export default function FamilyForm({
             autoFocus
             placeholder="e.g., Smith Family"
             disabled={isSubmitting}
+            slotProps={{ htmlInput: { maxLength: 100 } }}
             sx={{ mb: 3 }}
           />
 
@@ -242,6 +243,7 @@ export default function FamilyForm({
                   placeholder="First name"
                   value={member.firstName}
                   onChange={(e) => updateMember(index, 'firstName', e.target.value)}
+                  slotProps={{ htmlInput: { maxLength: 100 } }}
                   sx={{ flex: 1 }}
                 />
                 <TextField
@@ -249,6 +251,7 @@ export default function FamilyForm({
                   placeholder="Last name"
                   value={member.lastName}
                   onChange={(e) => updateMember(index, 'lastName', e.target.value)}
+                  slotProps={{ htmlInput: { maxLength: 100 } }}
                   sx={{ flex: 1 }}
                 />
                 {members.length > 1 && (
