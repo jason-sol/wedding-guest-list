@@ -63,7 +63,7 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
     labels:
-      icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/wedding.png
+      icon: https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/assets/People List/SVG/ic_fluent_people_list_24_color.svg
     ports:
       - mode: ingress
         target: 80
@@ -96,7 +96,7 @@ x-casaos:
     en_us: A web application for managing wedding guest lists with support for multiple events, individual guests, family groupings, categories, and flexible filtering. Features include multi-event management, family groupings with drag-drop reordering, color-coded category tags, user management with permissions, dark/light mode, and data import/export.
   developer: ""
   hostname: ""
-  icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/wedding.png
+  icon: https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/assets/People List/SVG/ic_fluent_people_list_24_color.svg
   index: /
   is_uncontrolled: false
   main: frontend
