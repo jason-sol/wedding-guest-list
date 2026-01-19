@@ -23,7 +23,7 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     labels:
-      icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/wedding.png
+      icon: https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/assets/People List/SVG/ic_fluent_people_list_24_color.svg
     restart: unless-stopped
     volumes:
       - type: bind
