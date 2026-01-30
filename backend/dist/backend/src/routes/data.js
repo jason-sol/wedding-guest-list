@@ -28,12 +28,17 @@ router.post('/import', permissions_1.requireOwner, (req, res) => {
             return (0, apiResponse_1.sendValidationError)(res, validation.error, validation.details);
         }
         const { guests = [], families = [], categories = [], users = [], events = [], permissions = [], } = validation.data;
+        // Owner privileges should only come from environment variables
+        const sanitizedUsers = users.map(user => ({
+            ...user,
+            isOwner: false, // Always set to false - owner is configured via env vars
+        }));
         // Import data with preserved IDs
         store_1.store.importData({
             guests,
             families,
             categories,
-            users,
+            users: sanitizedUsers,
             events,
             permissions,
         });

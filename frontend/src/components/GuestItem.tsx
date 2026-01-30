@@ -1,6 +1,6 @@
 /**
  * Guest Item component using MUI
- * Displays a single guest with categories, actions, and selection support
+ * Displays a single guest with categories, RSVP toggle, actions, and selection support
  */
 
 import { useState } from 'react';
@@ -12,12 +12,19 @@ import {
   Checkbox,
   Stack,
   Chip,
+  ToggleButtonGroup,
+  ToggleButton,
+  Tooltip,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
 import GroupRemoveIcon from '@mui/icons-material/GroupRemove';
-import { Guest, CategoryInfo, Event, PermissionLevel } from '../types';
-import { removeGuestFromFamily, GuestPresenceInfo } from '../api';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import RestaurantIcon from '@mui/icons-material/Restaurant';
+import { Guest, CategoryInfo, Event, PermissionLevel, RSVPStatus } from '../types';
+import { removeGuestFromFamily, updateGuest, GuestPresenceInfo } from '../api';
 import CategoryTag from './CategoryTag';
 import AssignToFamilyModal from './AssignToFamilyModal';
 import EditGuestForm from './EditGuestForm';
@@ -53,6 +60,21 @@ export default function GuestItem({
 }: GuestItemProps) {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [isUpdatingRsvp, setIsUpdatingRsvp] = useState(false);
+
+  const handleRsvpChange = async (_: React.MouseEvent<HTMLElement>, newRsvp: RSVPStatus | null) => {
+    if (!newRsvp || readOnly || isUpdatingRsvp) return;
+
+    setIsUpdatingRsvp(true);
+    try {
+      await updateGuest(eventId, guest.id, { rsvp: newRsvp });
+      onUpdate();
+    } catch (error) {
+      console.error('Failed to update RSVP:', error);
+    } finally {
+      setIsUpdatingRsvp(false);
+    }
+  };
 
   const handleRemoveFromFamily = async () => {
     if (!guest.familyId) return;
@@ -119,6 +141,64 @@ export default function GuestItem({
               </Stack>
             )}
           </Box>
+
+          {/* RSVP Toggle and Dietary Indicator */}
+          {!selectionMode && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+              <ToggleButtonGroup
+                value={guest.rsvp || 'pending'}
+                exclusive
+                onChange={handleRsvpChange}
+                size="small"
+                disabled={readOnly || isUpdatingRsvp}
+                sx={{
+                  '& .MuiToggleButton-root': {
+                    py: 0.25,
+                    px: 0.75,
+                  },
+                }}
+              >
+                <ToggleButton
+                  value="accepted"
+                  sx={{
+                    '&.Mui-selected': {
+                      bgcolor: 'success.main',
+                      color: 'success.contrastText',
+                      '&:hover': { bgcolor: 'success.dark' },
+                    },
+                  }}
+                >
+                  <Tooltip title="Attending">
+                    <EventAvailableIcon fontSize="small" />
+                  </Tooltip>
+                </ToggleButton>
+                <ToggleButton value="pending">
+                  <Tooltip title="Pending">
+                    <HelpOutlineIcon fontSize="small" />
+                  </Tooltip>
+                </ToggleButton>
+                <ToggleButton
+                  value="declined"
+                  sx={{
+                    '&.Mui-selected': {
+                      bgcolor: 'error.main',
+                      color: 'error.contrastText',
+                      '&:hover': { bgcolor: 'error.dark' },
+                    },
+                  }}
+                >
+                  <Tooltip title="Declined">
+                    <EventBusyIcon fontSize="small" />
+                  </Tooltip>
+                </ToggleButton>
+              </ToggleButtonGroup>
+              {guest.dietaryRequirements && (
+                <Tooltip title={`Dietary: ${guest.dietaryRequirements}`}>
+                  <RestaurantIcon fontSize="small" color="action" />
+                </Tooltip>
+              )}
+            </Box>
+          )}
 
           {/* Category Tags */}
           {guest.tags.length > 0 && (

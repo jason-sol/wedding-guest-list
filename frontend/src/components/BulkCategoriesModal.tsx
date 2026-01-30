@@ -17,7 +17,6 @@ import {
   Chip,
   CircularProgress,
   Alert,
-  Divider,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
@@ -45,15 +44,6 @@ export default function BulkCategoriesModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedCount, setProcessedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
-
-  // Calculate which categories are present in any of the selected guests
-  const categoriesInUse = useMemo(() => {
-    const inUse = new Set<string>();
-    selectedGuests.forEach(guest => {
-      guest.tags.forEach(tag => inUse.add(tag));
-    });
-    return inUse;
-  }, [selectedGuests]);
 
   // Count how many guests have each category
   const categoryGuestCounts = useMemo(() => {
@@ -174,7 +164,6 @@ export default function BulkCategoriesModal({
             {sortedCategories.map(category => {
               const guestCount = categoryGuestCounts.get(category.name) || 0;
               const allHave = guestCount === selectedGuests.length;
-              const someHave = guestCount > 0 && guestCount < selectedGuests.length;
               const noneHave = guestCount === 0;
 
               return (

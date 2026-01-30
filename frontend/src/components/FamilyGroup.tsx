@@ -14,11 +14,19 @@ import {
   Box,
   Stack,
   Chip,
+  ToggleButtonGroup,
+  ToggleButton,
+  Tooltip,
+  CircularProgress,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import EditIcon from '@mui/icons-material/Edit';
 import GroupIcon from '@mui/icons-material/Group';
-import { Family, Guest, CategoryInfo, Event, PermissionLevel } from '../types';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { Family, Guest, CategoryInfo, Event, PermissionLevel, RSVPStatus } from '../types';
+import { updateGuest } from '../api';
 import { GuestPresenceMap } from '../api';
 import GuestItem from './GuestItem';
 import EditFamilyForm from './EditFamilyForm';
@@ -60,6 +68,7 @@ export default function FamilyGroup({
 }: FamilyGroupProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [isUpdatingRsvp, setIsUpdatingRsvp] = useState(false);
   const checkboxRef = useRef<HTMLInputElement>(null);
 
   const familyMembers = family.members
@@ -83,6 +92,38 @@ export default function FamilyGroup({
     e.stopPropagation();
     const memberIds = familyMembers.map(m => m.id);
     onFamilySelectionChange?.(memberIds, e.target.checked);
+  };
+
+  // Calculate family RSVP status (show common status or null if mixed)
+  const getFamilyRsvpStatus = (): RSVPStatus | null => {
+    if (familyMembers.length === 0) return null;
+    const statuses = familyMembers.map(m => m.rsvp || 'pending');
+    const firstStatus = statuses[0];
+    return statuses.every(s => s === firstStatus) ? firstStatus : null;
+  };
+
+  const familyRsvpStatus = getFamilyRsvpStatus();
+
+  const handleFamilyRsvpChange = async (
+    _event: React.MouseEvent<HTMLElement>,
+    newStatus: RSVPStatus | null
+  ) => {
+    if (!newStatus || isUpdatingRsvp) return;
+
+    setIsUpdatingRsvp(true);
+    try {
+      // Update all family members
+      await Promise.all(
+        familyMembers.map(member =>
+          updateGuest(eventId, member.id, { rsvp: newStatus })
+        )
+      );
+      onUpdate();
+    } catch (error) {
+      console.error('Failed to update family RSVP:', error);
+    } finally {
+      setIsUpdatingRsvp(false);
+    }
   };
 
   return (
@@ -132,6 +173,59 @@ export default function FamilyGroup({
             size="small"
             variant="outlined"
           />
+
+          {/* Family RSVP Toggle */}
+          {!selectionMode && (
+            <Tooltip title={readOnly ? 'View-only mode' : 'Set RSVP for entire family'}>
+              <Box onClick={(e) => e.stopPropagation()}>
+                {isUpdatingRsvp ? (
+                  <CircularProgress size={20} />
+                ) : (
+                  <ToggleButtonGroup
+                    value={familyRsvpStatus}
+                    exclusive
+                    onChange={handleFamilyRsvpChange}
+                    size="small"
+                    disabled={readOnly}
+                    sx={{
+                      '& .MuiToggleButton-root': {
+                        py: 0.25,
+                        px: 0.75,
+                      },
+                    }}
+                  >
+                    <ToggleButton
+                      value="accepted"
+                      sx={{
+                        '&.Mui-selected': {
+                          bgcolor: 'success.main',
+                          color: 'success.contrastText',
+                          '&:hover': { bgcolor: 'success.dark' },
+                        },
+                      }}
+                    >
+                      <EventAvailableIcon sx={{ fontSize: '1rem' }} />
+                    </ToggleButton>
+                    <ToggleButton value="pending">
+                      <HelpOutlineIcon sx={{ fontSize: '1rem' }} />
+                    </ToggleButton>
+                    <ToggleButton
+                      value="declined"
+                      sx={{
+                        '&.Mui-selected': {
+                          bgcolor: 'error.main',
+                          color: 'error.contrastText',
+                          '&:hover': { bgcolor: 'error.dark' },
+                        },
+                      }}
+                    >
+                      <EventBusyIcon sx={{ fontSize: '1rem' }} />
+                    </ToggleButton>
+                  </ToggleButtonGroup>
+                )}
+              </Box>
+            </Tooltip>
+          )}
 
           {!readOnly && !selectionMode && (
             <Button

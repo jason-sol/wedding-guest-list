@@ -47,7 +47,10 @@ import FileUploadIcon from '@mui/icons-material/FileUpload';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckIcon from '@mui/icons-material/Check';
-import { Guest, Family, CategoryInfo } from './types';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { Guest, Family, CategoryInfo, RSVPStatus } from './types';
 import { fetchGuests, fetchFamilies, fetchCategories, fetchGuestPresence, exportData, importData, createEvent, GuestPresenceMap } from './api';
 import { useFilteredGuests } from './hooks/useFilteredGuests';
 import { useToast } from './components/Toast';
@@ -62,6 +65,7 @@ import UserManagement from './components/UserManagement';
 import EventSettings from './components/EventSettings';
 import Login from './components/Login';
 import ScrollToTop from './components/ScrollToTop';
+import ImportRsvpModal from './components/ImportRsvpModal';
 import { shouldUseWhiteText, getContrastAdjustedColor } from './components/CategoryTag';
 
 function App() {
@@ -74,6 +78,7 @@ function App() {
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
   const [guestPresence, setGuestPresence] = useState<GuestPresenceMap>({});
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedRsvpStatuses, setSelectedRsvpStatuses] = useState<RSVPStatus[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [showGuestForm, setShowGuestForm] = useState(false);
   const [showFamilyForm, setShowFamilyForm] = useState(false);
@@ -88,6 +93,7 @@ function App() {
   const [showUserManagement, setShowUserManagement] = useState(false);
   const [editingEvent, setEditingEvent] = useState<string | null>(null);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
+  const [showImportRsvpModal, setShowImportRsvpModal] = useState(false);
   const scrollPositionRef = useRef<number | null>(null);
   const shouldRestoreScrollRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -262,6 +268,7 @@ function App() {
     guests,
     selectedCategories,
     searchTerm,
+    selectedRsvpStatuses,
   });
 
   if (isAuthenticated === false) {
@@ -485,6 +492,16 @@ function App() {
                     <FileUploadIcon sx={{ mr: 1 }} />
                     {isImporting ? 'Importing...' : 'Import Data'}
                   </MenuItem>
+                  <Divider />
+                  <MenuItem
+                    onClick={() => {
+                      setMoreMenuAnchor(null);
+                      setShowImportRsvpModal(true);
+                    }}
+                  >
+                    <FileUploadIcon sx={{ mr: 1 }} />
+                    Import RSVP from JOY
+                  </MenuItem>
                 </Menu>
                 <input
                   type="file"
@@ -550,6 +567,47 @@ function App() {
             </Stack>
           </Box>
 
+          {/* RSVP Status filter */}
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1 }}>
+              Filter by RSVP Status
+            </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center" sx={{ minHeight: 32 }}>
+              {(['accepted', 'pending', 'declined'] as RSVPStatus[]).map((status) => {
+                const isSelected = selectedRsvpStatuses.includes(status);
+                const config = {
+                  accepted: { label: 'Attending', color: 'success' as const, icon: <EventAvailableIcon sx={{ fontSize: '1rem' }} /> },
+                  pending: { label: 'Pending', color: 'default' as const, icon: <HelpOutlineIcon sx={{ fontSize: '1rem' }} /> },
+                  declined: { label: 'Declined', color: 'error' as const, icon: <EventBusyIcon sx={{ fontSize: '1rem' }} /> },
+                }[status];
+
+                return (
+                  <Chip
+                    key={status}
+                    label={config.label}
+                    icon={isSelected ? <CheckIcon sx={{ fontSize: '1rem' }} /> : config.icon}
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelectedRsvpStatuses(selectedRsvpStatuses.filter(s => s !== status));
+                      } else {
+                        setSelectedRsvpStatuses([...selectedRsvpStatuses, status]);
+                      }
+                    }}
+                    variant={isSelected ? 'filled' : 'outlined'}
+                    color={isSelected ? config.color : 'default'}
+                  />
+                );
+              })}
+              <Button
+                size="small"
+                onClick={() => setSelectedRsvpStatuses([])}
+                sx={{ visibility: selectedRsvpStatuses.length > 0 ? 'visible' : 'hidden' }}
+              >
+                Clear
+              </Button>
+            </Stack>
+          </Box>
+
           {/* Search and stats */}
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
             <TextField
@@ -592,6 +650,7 @@ function App() {
             families={families}
             categories={categories}
             selectedCategories={selectedCategories}
+            selectedRsvpStatuses={selectedRsvpStatuses}
             searchTerm={searchTerm}
             onUpdate={() => loadData(true)}
             eventId={currentEvent.id}
@@ -696,6 +755,20 @@ function App() {
           onEventDeleted={() => {
             setEditingEvent(null);
             refreshEvents();
+          }}
+        />
+      )}
+
+      {showImportRsvpModal && currentEvent && (
+        <ImportRsvpModal
+          eventId={currentEvent.id}
+          guests={guests}
+          families={families}
+          onClose={() => setShowImportRsvpModal(false)}
+          onSuccess={() => {
+            setShowImportRsvpModal(false);
+            loadData(true);
+            showSuccess('RSVP data imported successfully');
           }}
         />
       )}

@@ -20,13 +20,18 @@ import SelectAllIcon from '@mui/icons-material/SelectAll';
 import DeselectIcon from '@mui/icons-material/Deselect';
 import EventIcon from '@mui/icons-material/Event';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
-import { Guest, Family, CategoryInfo, Event, PermissionLevel } from '../types';
+import RsvpIcon from '@mui/icons-material/Rsvp';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { Guest, Family, CategoryInfo, Event, PermissionLevel, RSVPStatus } from '../types';
 import { useFilteredGuests } from '../hooks/useFilteredGuests';
 import { GuestPresenceMap } from '../api';
 import GuestItem from './GuestItem';
 import FamilyGroup from './FamilyGroup';
 import BulkEventsModal from './BulkEventsModal';
 import BulkCategoriesModal from './BulkCategoriesModal';
+import BulkRsvpModal from './BulkRsvpModal';
 
 interface EventWithPermission extends Event {
   permission: PermissionLevel;
@@ -37,6 +42,7 @@ interface GuestListProps {
   families: Family[];
   categories: CategoryInfo[];
   selectedCategories: string[];
+  selectedRsvpStatuses?: RSVPStatus[];
   searchTerm: string;
   onUpdate: () => void;
   eventId: string;
@@ -50,6 +56,7 @@ export default function GuestList({
   families,
   categories,
   selectedCategories,
+  selectedRsvpStatuses = [],
   searchTerm,
   onUpdate,
   eventId,
@@ -61,6 +68,7 @@ export default function GuestList({
   const [selectedGuestIds, setSelectedGuestIds] = useState<Set<string>>(new Set());
   const [showBulkEventsModal, setShowBulkEventsModal] = useState(false);
   const [showBulkCategoriesModal, setShowBulkCategoriesModal] = useState(false);
+  const [showBulkRsvpModal, setShowBulkRsvpModal] = useState(false);
 
   const handleSelectionChange = useCallback((guestId: string, selected: boolean) => {
     setSelectedGuestIds(prev => {
@@ -111,12 +119,20 @@ export default function GuestList({
     onUpdate();
   }, [onUpdate]);
 
+  const handleBulkRsvpComplete = useCallback(() => {
+    setShowBulkRsvpModal(false);
+    setSelectedGuestIds(new Set());
+    setSelectionMode(false);
+    onUpdate();
+  }, [onUpdate]);
+
   const safeGuests = Array.isArray(guests) ? guests : [];
   const safeFamilies = Array.isArray(families) ? families : [];
 
   const filteredGuests = useFilteredGuests({
     guests: safeGuests,
     selectedCategories,
+    selectedRsvpStatuses,
     searchTerm,
   });
 
@@ -189,6 +205,14 @@ export default function GuestList({
   const selectedGuests = filteredGuests.filter(g => selectedGuestIds.has(g.id));
   const allSelected = filteredGuests.length > 0 && filteredGuests.every(g => selectedGuestIds.has(g.id));
   const someSelected = selectedGuestIds.size > 0;
+
+  // Calculate RSVP counts
+  const rsvpCounts = useMemo(() => {
+    const accepted = filteredGuests.filter(g => g.rsvp === 'accepted').length;
+    const declined = filteredGuests.filter(g => g.rsvp === 'declined').length;
+    const pending = filteredGuests.filter(g => !g.rsvp || g.rsvp === 'pending').length;
+    return { accepted, declined, pending };
+  }, [filteredGuests]);
 
   return (
     <Box>
@@ -266,6 +290,48 @@ export default function GuestList({
             >
               Manage Events
             </Button>
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<RsvpIcon />}
+              onClick={() => setShowBulkRsvpModal(true)}
+            >
+              Update RSVP
+            </Button>
+          </Stack>
+        </Paper>
+      )}
+
+      {/* RSVP Summary Bar */}
+      {filteredGuests.length > 0 && (
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 1.5,
+            mb: 2,
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 3,
+            flexWrap: 'wrap',
+          }}
+        >
+          <Stack direction="row" spacing={0.5} alignItems="center">
+            <EventAvailableIcon color="success" fontSize="small" />
+            <Typography variant="body2">
+              <strong>{rsvpCounts.accepted}</strong> Attending
+            </Typography>
+          </Stack>
+          <Stack direction="row" spacing={0.5} alignItems="center">
+            <HelpOutlineIcon color="action" fontSize="small" />
+            <Typography variant="body2">
+              <strong>{rsvpCounts.pending}</strong> Pending
+            </Typography>
+          </Stack>
+          <Stack direction="row" spacing={0.5} alignItems="center">
+            <EventBusyIcon color="error" fontSize="small" />
+            <Typography variant="body2">
+              <strong>{rsvpCounts.declined}</strong> Declined
+            </Typography>
           </Stack>
         </Paper>
       )}
@@ -357,6 +423,15 @@ export default function GuestList({
           eventId={eventId}
           onClose={() => setShowBulkCategoriesModal(false)}
           onSuccess={handleBulkCategoriesComplete}
+        />
+      )}
+
+      {showBulkRsvpModal && (
+        <BulkRsvpModal
+          selectedGuests={selectedGuests}
+          eventId={eventId}
+          onClose={() => setShowBulkRsvpModal(false)}
+          onSuccess={handleBulkRsvpComplete}
         />
       )}
     </Box>

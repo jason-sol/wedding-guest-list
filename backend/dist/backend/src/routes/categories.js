@@ -6,14 +6,15 @@ const colors_1 = require("../../../shared/utils/colors");
 const capitalize_1 = require("../../../shared/utils/capitalize");
 const validation_1 = require("../validation");
 const apiResponse_1 = require("../apiResponse");
+const permissions_1 = require("../middleware/permissions");
 const router = (0, express_1.Router)();
 // GET /api/categories - Get all categories
 router.get('/', (req, res) => {
     const categories = store_1.store.getAllCategories();
     (0, apiResponse_1.sendSuccess)(res, categories);
 });
-// POST /api/categories - Add a new category
-router.post('/', (req, res) => {
+// POST /api/categories - Add a new category (admin or owner)
+router.post('/', permissions_1.requireAdminOrOwner, (req, res) => {
     const validation = (0, validation_1.validate)(validation_1.CreateCategorySchema, req.body);
     if (!validation.success) {
         return (0, apiResponse_1.sendValidationError)(res, validation.error, validation.details);
@@ -36,8 +37,8 @@ router.post('/', (req, res) => {
     const added = store_1.store.addCategory(category);
     (0, apiResponse_1.sendCreated)(res, added);
 });
-// PUT /api/categories/:name - Rename a category
-router.put('/:name', (req, res) => {
+// PUT /api/categories/:name - Rename a category (admin or owner)
+router.put('/:name', permissions_1.requireAdminOrOwner, (req, res) => {
     const oldName = decodeURIComponent(req.params.name);
     const { name: newName } = req.body;
     if (!newName || typeof newName !== 'string' || !newName.trim()) {
@@ -62,25 +63,27 @@ router.put('/:name', (req, res) => {
     }
     (0, apiResponse_1.sendSuccess)(res, renamed);
 });
-// DELETE /api/categories/:name - Delete a category
-router.delete('/:name', (req, res) => {
+// DELETE /api/categories/:name - Delete a category (admin or owner)
+router.delete('/:name', permissions_1.requireAdminOrOwner, (req, res) => {
     const categoryName = decodeURIComponent(req.params.name);
     // Check if category exists
     const category = store_1.store.getCategory(categoryName);
     if (!category) {
         return (0, apiResponse_1.sendNotFound)(res, 'Category');
     }
+    // Use the actual stored category name for comparisons (case-sensitive match)
+    const actualName = category.name;
     // Remove this category from all guests
     const allGuests = store_1.store.getAllGuests();
     allGuests.forEach(guest => {
-        if (guest.tags.includes(categoryName)) {
+        if (guest.tags.includes(actualName)) {
             // Remove the category from guest's tags
-            const updatedTags = guest.tags.filter(tag => tag !== categoryName);
+            const updatedTags = guest.tags.filter(tag => tag !== actualName);
             store_1.store.updateGuest(guest.id, { tags: updatedTags });
         }
     });
     // Delete the category
-    const deleted = store_1.store.deleteCategory(categoryName);
+    const deleted = store_1.store.deleteCategory(actualName);
     if (!deleted) {
         return (0, apiResponse_1.sendServerError)(res, 'Failed to delete category');
     }

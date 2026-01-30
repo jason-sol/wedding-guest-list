@@ -50,6 +50,7 @@ export interface Guest {
   familyId: string | null;
   tags: Category[];
   rsvp?: RSVPStatus;
+  dietaryRequirements?: string; // Dietary restrictions, allergies, etc.
 }
 
 // Family data structure (now has eventId)

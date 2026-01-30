@@ -73,16 +73,35 @@ router.post('/', requireEventAdmin, (req: Request, res: Response) => {
 
   // If members are provided as guest data, create guests first
   const memberIds: string[] = [];
+  const allGuests = store.getAllGuests();
+
   if (Array.isArray(members)) {
     for (const member of members) {
       if (typeof member === 'object' && ('firstName' in member || 'lastName' in member)) {
-        // Create guest and add to family (capitalize names)
+        const normalizedFirstName = capitalizeWords((member.firstName || '').trim());
+        const normalizedLastName = capitalizeWords((member.lastName || '').trim());
+
+        // Check if a guest with the same name exists in other events to inherit tags
+        // Tags represent relationship/location which should be consistent across events
+        let inheritedTags = member.tags || [];
+        if (!member.tags || member.tags.length === 0) {
+          const existingGuest = allGuests.find(
+            g =>
+              g.firstName.toLowerCase() === normalizedFirstName.toLowerCase() &&
+              g.lastName.toLowerCase() === normalizedLastName.toLowerCase()
+          );
+          if (existingGuest && existingGuest.tags.length > 0) {
+            inheritedTags = existingGuest.tags;
+          }
+        }
+
+        // Create guest and add to family
         const guest = store.addGuest({
           eventId,
-          firstName: capitalizeWords((member.firstName || '').trim()),
-          lastName: capitalizeWords((member.lastName || '').trim()),
+          firstName: normalizedFirstName,
+          lastName: normalizedLastName,
           familyId: null, // Will be set after family is created
-          tags: member.tags || [],
+          tags: inheritedTags,
           rsvp: undefined,
         });
         memberIds.push(guest.id);

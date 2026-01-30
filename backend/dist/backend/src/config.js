@@ -112,6 +112,11 @@ function buildConfig() {
         ? ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000']
         : [];
     const allowedOrigins = getEnvList('CORS_ALLOWED_ORIGINS', defaultOrigins);
+    // Security warning for CORS wildcard in production
+    if (isProduction && allowedOrigins.includes('*')) {
+        console.warn('\x1b[33m%s\x1b[0m', 'SECURITY WARNING: CORS_ALLOWED_ORIGINS is set to "*" (wildcard) in production. ' +
+            'This allows requests from any origin. For better security, specify explicit origins.');
+    }
     // Data file path - resolve relative to backend directory
     const dataDirectory = path_1.default.resolve(__dirname, '../../data');
     const dataFilePath = path_1.default.join(dataDirectory, 'data.json');

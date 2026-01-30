@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.requireEventViewer = exports.requireEventAdmin = void 0;
 exports.requireOwner = requireOwner;
 exports.requireEventPermission = requireEventPermission;
+exports.requireAdminOrOwner = requireAdminOrOwner;
 const store_1 = require("../store");
 const apiResponse_1 = require("../apiResponse");
 // Permission level hierarchy (higher index = more permissions)
@@ -79,3 +80,29 @@ exports.requireEventAdmin = requireEventPermission('admin');
  * Shorthand for requireEventPermission('viewer').
  */
 exports.requireEventViewer = requireEventPermission('viewer');
+/**
+ * Middleware to require admin access on at least one event, or owner access.
+ * Used for global resources like categories that aren't event-scoped.
+ */
+function requireAdminOrOwner(req, res, next) {
+    if (!req.user) {
+        (0, apiResponse_1.sendUnauthorized)(res, 'Authentication required');
+        return;
+    }
+    // Owner has full access
+    if (req.user.isOwner) {
+        next();
+        return;
+    }
+    // Check if user has admin permission on any event
+    const events = store_1.store.getAllEvents();
+    const hasAdminAccess = events.some(event => {
+        const permission = store_1.store.getPermission(req.user.userId, event.id);
+        return permission === 'admin';
+    });
+    if (!hasAdminAccess) {
+        (0, apiResponse_1.sendForbidden)(res, 'Admin access required. You must be an admin on at least one event.');
+        return;
+    }
+    next();
+}

@@ -1,4 +1,4 @@
-import { Guest, Family, CategoryInfo, Event, UserEventPermission, PermissionLevel } from './types';
+import { Guest, Family, CategoryInfo, Event, UserEventPermission, PermissionLevel, RSVPStatus } from './types';
 
 /**
  * Base URL for all API calls.
@@ -544,4 +544,87 @@ export async function importData(file: File): Promise<{
       permissions: number;
     };
   }>(response);
+}
+
+// ============================================================
+// RSVP Bulk Operations
+// ============================================================
+
+export interface BulkRsvpResult {
+  updated: number;
+  guests: Guest[];
+  errors?: string[];
+}
+
+export async function bulkUpdateRsvp(
+  eventId: string,
+  guestIds: string[],
+  rsvp: RSVPStatus
+): Promise<BulkRsvpResult> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/guests/bulk-rsvp`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ guestIds, rsvp }),
+  });
+  handleAuthError(response);
+  if (!response.ok) await handleErrorResponse(response, 'Failed to update RSVP');
+  return extractData<BulkRsvpResult>(response);
+}
+
+// ============================================================
+// JOY CSV Import
+// ============================================================
+
+export interface JoyImportMatch {
+  guestId: string;
+  name: string;
+  rsvp: RSVPStatus;
+  dietaryRequirements?: string;
+  previousRsvp?: RSVPStatus;
+}
+
+export interface JoyPotentialMatch {
+  guestId: string;
+  firstName: string;
+  lastName: string;
+  similarity: number;
+}
+
+export interface JoyImportUnmatched {
+  rowIndex: number;
+  firstName: string;
+  lastName: string;
+  rsvp: RSVPStatus;
+  dietaryRequirements?: string;
+  potentialMatches: JoyPotentialMatch[];
+}
+
+export interface JoyImportResult {
+  dryRun: boolean;
+  eventId: string;
+  eventName: string;
+  matched: JoyImportMatch[];
+  unmatched: JoyImportUnmatched[];
+  errors: string[];
+  summary: {
+    total: number;
+    matched: number;
+    unmatched: number;
+    errors: number;
+  };
+}
+
+export async function importJoyCsv(
+  eventId: string,
+  csvContent: string,
+  dryRun: boolean = false
+): Promise<JoyImportResult> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/guests/import-joy`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ csvContent, dryRun }),
+  });
+  handleAuthError(response);
+  if (!response.ok) await handleErrorResponse(response, 'Failed to import CSV');
+  return extractData<JoyImportResult>(response);
 }

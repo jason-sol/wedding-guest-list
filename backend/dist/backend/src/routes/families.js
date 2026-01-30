@@ -47,16 +47,29 @@ router.post('/', permissions_1.requireEventAdmin, (req, res) => {
     const { name, members } = validation.data;
     // If members are provided as guest data, create guests first
     const memberIds = [];
+    const allGuests = store_1.store.getAllGuests();
     if (Array.isArray(members)) {
         for (const member of members) {
             if (typeof member === 'object' && ('firstName' in member || 'lastName' in member)) {
-                // Create guest and add to family (capitalize names)
+                const normalizedFirstName = (0, capitalize_1.capitalizeWords)((member.firstName || '').trim());
+                const normalizedLastName = (0, capitalize_1.capitalizeWords)((member.lastName || '').trim());
+                // Check if a guest with the same name exists in other events to inherit tags
+                // Tags represent relationship/location which should be consistent across events
+                let inheritedTags = member.tags || [];
+                if (!member.tags || member.tags.length === 0) {
+                    const existingGuest = allGuests.find(g => g.firstName.toLowerCase() === normalizedFirstName.toLowerCase() &&
+                        g.lastName.toLowerCase() === normalizedLastName.toLowerCase());
+                    if (existingGuest && existingGuest.tags.length > 0) {
+                        inheritedTags = existingGuest.tags;
+                    }
+                }
+                // Create guest and add to family
                 const guest = store_1.store.addGuest({
                     eventId,
-                    firstName: (0, capitalize_1.capitalizeWords)((member.firstName || '').trim()),
-                    lastName: (0, capitalize_1.capitalizeWords)((member.lastName || '').trim()),
+                    firstName: normalizedFirstName,
+                    lastName: normalizedLastName,
                     familyId: null, // Will be set after family is created
-                    tags: member.tags || [],
+                    tags: inheritedTags,
                     rsvp: undefined,
                 });
                 memberIds.push(guest.id);
@@ -136,6 +149,16 @@ router.put('/:id/members/reorder', permissions_1.requireEventAdmin, (req, res) =
     const invalidIds = memberIds.filter(id => !family.members.includes(id));
     if (invalidIds.length > 0) {
         return (0, apiResponse_1.sendValidationError)(res, `Invalid member IDs: ${invalidIds.join(', ')}`);
+    }
+    // Validate all original members are included (prevent accidental member loss)
+    const missingIds = family.members.filter(id => !memberIds.includes(id));
+    if (missingIds.length > 0) {
+        return (0, apiResponse_1.sendValidationError)(res, `Missing family members: ${missingIds.join(', ')}. All members must be included when reordering.`);
+    }
+    // Validate no duplicates
+    const uniqueIds = new Set(memberIds);
+    if (uniqueIds.size !== memberIds.length) {
+        return (0, apiResponse_1.sendValidationError)(res, 'Duplicate member IDs are not allowed');
     }
     // Update family with new member order
     const updated = store_1.store.updateFamily(req.params.id, { members: memberIds });

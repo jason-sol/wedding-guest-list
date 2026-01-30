@@ -57,6 +57,11 @@ export const CreateGuestSchema = z.object({
   familyId: z.string().nullable().optional(),
   tags: z.array(z.string().trim().max(50)).max(20).optional().default([]),
   rsvp: RSVPStatusSchema.optional(),
+  dietaryRequirements: z.string()
+    .trim()
+    .max(500, 'Dietary requirements cannot exceed 500 characters')
+    .transform(s => s.replace(/[<>]/g, ''))
+    .optional(),
 });
 
 /**
@@ -77,6 +82,11 @@ export const UpdateGuestSchema = z.object({
   familyId: z.string().nullable().optional(),
   tags: z.array(z.string().trim().max(50)).max(20).optional(),
   rsvp: RSVPStatusSchema.optional(),
+  dietaryRequirements: z.string()
+    .trim()
+    .max(500, 'Dietary requirements cannot exceed 500 characters')
+    .transform(s => s.replace(/[<>]/g, ''))
+    .optional(),
 });
 
 /**
@@ -91,6 +101,7 @@ export const GuestSchema = z.object({
   familyId: z.string().nullable(),
   tags: z.array(z.string()),
   rsvp: RSVPStatusSchema.optional(),
+  dietaryRequirements: z.string().trim().max(500).optional(),
 });
 
 /**
@@ -98,6 +109,22 @@ export const GuestSchema = z.object({
  */
 export const CopyGuestSchema = z.object({
   targetEventId: z.string().min(1, 'Target event ID is required'),
+});
+
+/**
+ * Schema for bulk RSVP update.
+ */
+export const BulkRsvpUpdateSchema = z.object({
+  guestIds: z.array(z.string()).min(1, 'At least one guest ID is required'),
+  rsvp: RSVPStatusSchema,
+});
+
+/**
+ * Schema for JOY CSV import.
+ */
+export const JoyImportSchema = z.object({
+  csvContent: z.string().min(1, 'CSV content is required'),
+  dryRun: z.boolean().optional().default(false),
 });
 
 // ============================================================
@@ -445,3 +472,5 @@ export type UpdateUserInput = z.infer<typeof UpdateUserSchema>;
 export type SetPermissionInput = z.infer<typeof SetPermissionSchema>;
 export type ImportDataInput = z.infer<typeof ImportDataSchema>;
 export type LoginInput = z.infer<typeof LoginSchema>;
+export type BulkRsvpUpdateInput = z.infer<typeof BulkRsvpUpdateSchema>;
+export type JoyImportInput = z.infer<typeof JoyImportSchema>;

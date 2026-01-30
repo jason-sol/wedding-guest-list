@@ -4,7 +4,7 @@
  * Provides type-safe validation for all API inputs and data imports.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LoginSchema = exports.ImportDataSchema = exports.PermissionSchema = exports.SetPermissionSchema = exports.UserSchema = exports.UpdateUserSchema = exports.CreateUserSchema = exports.EventSchema = exports.ReorderEventsSchema = exports.UpdateEventSchema = exports.CreateEventSchema = exports.CategoryInfoSchema = exports.CreateCategorySchema = exports.FamilySchema = exports.ReconstructFamiliesSchema = exports.CopyFamilySchema = exports.AddGuestToFamilySchema = exports.ReorderMembersSchema = exports.UpdateFamilySchema = exports.CreateFamilySchema = exports.FamilyMemberInputSchema = exports.CopyGuestSchema = exports.GuestSchema = exports.UpdateGuestSchema = exports.CreateGuestSchema = exports.PermissionLevelSchema = exports.RSVPStatusSchema = void 0;
+exports.LoginSchema = exports.ImportDataSchema = exports.PermissionSchema = exports.SetPermissionSchema = exports.UserSchema = exports.UpdateUserSchema = exports.CreateUserSchema = exports.EventSchema = exports.ReorderEventsSchema = exports.UpdateEventSchema = exports.CreateEventSchema = exports.CategoryInfoSchema = exports.CreateCategorySchema = exports.FamilySchema = exports.ReconstructFamiliesSchema = exports.CopyFamilySchema = exports.AddGuestToFamilySchema = exports.ReorderMembersSchema = exports.UpdateFamilySchema = exports.CreateFamilySchema = exports.FamilyMemberInputSchema = exports.JoyImportSchema = exports.BulkRsvpUpdateSchema = exports.CopyGuestSchema = exports.GuestSchema = exports.UpdateGuestSchema = exports.CreateGuestSchema = exports.PermissionLevelSchema = exports.RSVPStatusSchema = void 0;
 exports.validate = validate;
 const zod_1 = require("zod");
 const config_1 = require("./config");
@@ -15,14 +15,12 @@ const getValidationLimits = () => (0, config_1.getConfig)().validation;
 // ============================================================
 /**
  * Sanitizes a string by trimming whitespace and removing potential XSS.
- * Note: This is basic sanitization - for production, consider a proper
- * HTML sanitization library like DOMPurify on the frontend.
  */
 const sanitizedString = (maxLength) => zod_1.z.string()
     .trim()
     .min(1, 'Cannot be empty')
     .max(maxLength, `Cannot exceed ${maxLength} characters`)
-    .transform(s => s.replace(/[<>]/g, '')); // Basic XSS prevention
+    .transform(s => s.replace(/[<>]/g, ''));
 /**
  * RSVP status enum.
  */
@@ -54,6 +52,11 @@ exports.CreateGuestSchema = zod_1.z.object({
     familyId: zod_1.z.string().nullable().optional(),
     tags: zod_1.z.array(zod_1.z.string().trim().max(50)).max(20).optional().default([]),
     rsvp: exports.RSVPStatusSchema.optional(),
+    dietaryRequirements: zod_1.z.string()
+        .trim()
+        .max(500, 'Dietary requirements cannot exceed 500 characters')
+        .transform(s => s.replace(/[<>]/g, ''))
+        .optional(),
 });
 /**
  * Schema for updating a guest (all fields optional).
@@ -73,6 +76,11 @@ exports.UpdateGuestSchema = zod_1.z.object({
     familyId: zod_1.z.string().nullable().optional(),
     tags: zod_1.z.array(zod_1.z.string().trim().max(50)).max(20).optional(),
     rsvp: exports.RSVPStatusSchema.optional(),
+    dietaryRequirements: zod_1.z.string()
+        .trim()
+        .max(500, 'Dietary requirements cannot exceed 500 characters')
+        .transform(s => s.replace(/[<>]/g, ''))
+        .optional(),
 });
 /**
  * Full guest schema (for import validation).
@@ -86,12 +94,27 @@ exports.GuestSchema = zod_1.z.object({
     familyId: zod_1.z.string().nullable(),
     tags: zod_1.z.array(zod_1.z.string()),
     rsvp: exports.RSVPStatusSchema.optional(),
+    dietaryRequirements: zod_1.z.string().trim().max(500).optional(),
 });
 /**
  * Schema for copying a guest to another event.
  */
 exports.CopyGuestSchema = zod_1.z.object({
     targetEventId: zod_1.z.string().min(1, 'Target event ID is required'),
+});
+/**
+ * Schema for bulk RSVP update.
+ */
+exports.BulkRsvpUpdateSchema = zod_1.z.object({
+    guestIds: zod_1.z.array(zod_1.z.string()).min(1, 'At least one guest ID is required'),
+    rsvp: exports.RSVPStatusSchema,
+});
+/**
+ * Schema for JOY CSV import.
+ */
+exports.JoyImportSchema = zod_1.z.object({
+    csvContent: zod_1.z.string().min(1, 'CSV content is required'),
+    dryRun: zod_1.z.boolean().optional().default(false),
 });
 // ============================================================
 // Family schemas (now event-scoped)
