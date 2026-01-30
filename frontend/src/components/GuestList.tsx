@@ -19,12 +19,14 @@ import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import SelectAllIcon from '@mui/icons-material/SelectAll';
 import DeselectIcon from '@mui/icons-material/Deselect';
 import EventIcon from '@mui/icons-material/Event';
+import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import { Guest, Family, CategoryInfo, Event, PermissionLevel } from '../types';
 import { useFilteredGuests } from '../hooks/useFilteredGuests';
 import { GuestPresenceMap } from '../api';
 import GuestItem from './GuestItem';
 import FamilyGroup from './FamilyGroup';
 import BulkEventsModal from './BulkEventsModal';
+import BulkCategoriesModal from './BulkCategoriesModal';
 
 interface EventWithPermission extends Event {
   permission: PermissionLevel;
@@ -58,6 +60,7 @@ export default function GuestList({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedGuestIds, setSelectedGuestIds] = useState<Set<string>>(new Set());
   const [showBulkEventsModal, setShowBulkEventsModal] = useState(false);
+  const [showBulkCategoriesModal, setShowBulkCategoriesModal] = useState(false);
 
   const handleSelectionChange = useCallback((guestId: string, selected: boolean) => {
     setSelectedGuestIds(prev => {
@@ -96,10 +99,15 @@ export default function GuestList({
     setSelectionMode(!selectionMode);
   }, [selectionMode]);
 
-  const handleBulkActionComplete = useCallback(() => {
+  const handleBulkEventsComplete = useCallback(() => {
     setShowBulkEventsModal(false);
     setSelectedGuestIds(new Set());
     setSelectionMode(false);
+    onUpdate();
+  }, [onUpdate]);
+
+  const handleBulkCategoriesComplete = useCallback(() => {
+    setShowBulkCategoriesModal(false);
     onUpdate();
   }, [onUpdate]);
 
@@ -230,23 +238,35 @@ export default function GuestList({
             bgcolor: 'primary.main',
             color: 'primary.contrastText',
             borderRadius: 2,
+            flexWrap: 'wrap',
+            gap: 2,
           }}
         >
           <Stack direction="row" spacing={1} alignItems="center">
             <Chip
               label={`${selectedGuestIds.size} guest${selectedGuestIds.size !== 1 ? 's' : ''} selected`}
               color="default"
-              sx={{ bgcolor: 'rgba(255,255,255,0.9)', fontWeight: 600 }}
+              sx={{ bgcolor: 'rgba(255,255,255,0.9)', color: '#1E293B', fontWeight: 600 }}
             />
           </Stack>
-          <Button
-            variant="contained"
-            color="secondary"
-            startIcon={<EventIcon />}
-            onClick={() => setShowBulkEventsModal(true)}
-          >
-            Manage Events
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<LocalOfferIcon />}
+              onClick={() => setShowBulkCategoriesModal(true)}
+            >
+              Manage Categories
+            </Button>
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<EventIcon />}
+              onClick={() => setShowBulkEventsModal(true)}
+            >
+              Manage Events
+            </Button>
+          </Stack>
         </Paper>
       )}
 
@@ -326,7 +346,17 @@ export default function GuestList({
           currentEventId={eventId}
           guestPresenceMap={guestPresence}
           onClose={() => setShowBulkEventsModal(false)}
-          onSuccess={handleBulkActionComplete}
+          onSuccess={handleBulkEventsComplete}
+        />
+      )}
+
+      {showBulkCategoriesModal && (
+        <BulkCategoriesModal
+          selectedGuests={selectedGuests}
+          categories={categories}
+          eventId={eventId}
+          onClose={() => setShowBulkCategoriesModal(false)}
+          onSuccess={handleBulkCategoriesComplete}
         />
       )}
     </Box>
