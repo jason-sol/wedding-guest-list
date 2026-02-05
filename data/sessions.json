@@ -1,19 +1,12 @@
 {
   "sessions": {
-    "e2dd2a22fb9469581c95abbd731b1b3e800b67d38be84a70d5f24e20cffadda7": {
+    "4a87064241ffefea2a73ca32985d6cf3bd3bdffa3aa065e8ae55115d8eac01ca": {
       "userId": "user-4",
       "username": "jason",
       "isOwner": true,
-      "expiresAt": 1769866967013,
-      "createdAt": 1769780567013
-    },
-    "4cb3de5e707cc0d33c24bfa74dedcdf0624a8913a721aedfd9b8256b61c1ce33": {
-      "userId": "user-4",
-      "username": "jason",
-      "isOwner": true,
-      "expiresAt": 1769871964006,
-      "createdAt": 1769785564006
+      "expiresAt": 1770389815732,
+      "createdAt": 1770303415732
     }
   },
-  "lastCleanup": 1769788402533
+  "lastCleanup": 1770334375448
 }

@@ -674,43 +674,84 @@ class DataStore {
     const targetEventFamilies = this.getFamiliesForEvent(targetEventId);
     const targetEventGuests = this.getGuestsForEvent(targetEventId);
 
-    // Find if a family with the same name already exists in the target event
-    let targetFamily = targetEventFamilies.find(f =>
-      f.name.toLowerCase() === sourceFamily.name.toLowerCase()
-    );
+    // Get source family members
+    const sourceFamilyMembers = sourceFamily.members
+      .map(id => this.guests.get(id))
+      .filter((g): g is Guest => g !== undefined);
 
-    if (!targetFamily) {
-      // Check if any other family members from the source family exist in the target event
-      const sourceFamilyMembers = sourceFamily.members
+    // Find target guests that match source family members (by name)
+    const matchingTargetGuests = targetEventGuests.filter(targetGuest => {
+      return sourceFamilyMembers.some(sourceMember =>
+        sourceMember.firstName.toLowerCase() === targetGuest.firstName.toLowerCase() &&
+        sourceMember.lastName.toLowerCase() === targetGuest.lastName.toLowerCase()
+      );
+    });
+
+    // Look for an existing family in target where ALL its members belong to THIS source family
+    // This prevents accidentally merging different families that have the same name
+    let targetFamily: Family | undefined;
+
+    for (const family of targetEventFamilies) {
+      const familyMembers = family.members
         .map(id => this.guests.get(id))
         .filter((g): g is Guest => g !== undefined);
 
-      const existingMembersInTarget = targetEventGuests.filter(targetGuest => {
-        return sourceFamilyMembers.some(sourceMember =>
-          sourceMember.firstName.toLowerCase() === targetGuest.firstName.toLowerCase() &&
-          sourceMember.lastName.toLowerCase() === targetGuest.lastName.toLowerCase()
-        );
+      if (familyMembers.length === 0) continue;
+
+      // Check if ALL members of this target family match members from our source family
+      const allMembersFromSourceFamily = familyMembers.every(member =>
+        sourceFamilyMembers.some(sourceMember =>
+          sourceMember.firstName.toLowerCase() === member.firstName.toLowerCase() &&
+          sourceMember.lastName.toLowerCase() === member.lastName.toLowerCase()
+        )
+      );
+
+      // Also check if at least one member matches (to confirm it's the right family)
+      const hasMatchingMember = familyMembers.some(member =>
+        sourceFamilyMembers.some(sourceMember =>
+          sourceMember.firstName.toLowerCase() === member.firstName.toLowerCase() &&
+          sourceMember.lastName.toLowerCase() === member.lastName.toLowerCase()
+        )
+      );
+
+      if (allMembersFromSourceFamily && hasMatchingMember) {
+        targetFamily = family;
+        break;
+      }
+    }
+
+    // If no suitable family found, create a new one
+    if (!targetFamily && matchingTargetGuests.length >= 1) {
+      // Create a new family in the target event
+      targetFamily = this.addFamily({
+        eventId: targetEventId,
+        name: sourceFamily.name,
+        members: [],
       });
 
-      // Only create family if there are at least 2 members (including this guest)
-      if (existingMembersInTarget.length >= 1) {
-        // Create a new family in the target event
-        targetFamily = this.addFamily({
-          eventId: targetEventId,
-          name: sourceFamily.name,
-          members: [],
-        });
-
-        // Add existing members to the new family
-        for (const member of existingMembersInTarget) {
-          if (!targetFamily.members.includes(member.id)) {
-            targetFamily.members.push(member.id);
-            member.familyId = targetFamily.id;
-            this.guests.set(member.id, member);
+      // Add existing matching members to the new family (remove from other families if needed)
+      for (const member of matchingTargetGuests) {
+        // Remove from any existing family first
+        if (member.familyId) {
+          const oldFamily = this.families.get(member.familyId);
+          if (oldFamily) {
+            oldFamily.members = oldFamily.members.filter(id => id !== member.id);
+            // Clean up empty family
+            if (oldFamily.members.length === 0) {
+              this.families.delete(oldFamily.id);
+            } else {
+              this.families.set(oldFamily.id, oldFamily);
+            }
           }
         }
-        this.families.set(targetFamily.id, targetFamily);
+
+        if (!targetFamily.members.includes(member.id)) {
+          targetFamily.members.push(member.id);
+          member.familyId = targetFamily.id;
+          this.guests.set(member.id, member);
+        }
       }
+      this.families.set(targetFamily.id, targetFamily);
     }
 
     // Add this guest to the target family
@@ -726,16 +767,18 @@ class DataStore {
 
   /**
    * Reconstruct family relationships in a target event based on a source event.
-   * This is useful for fixing events where families were lost during copy.
+   * This is useful for fixing events where families were lost or merged during copy.
+   * Each source family maps to its own unique target family (even if names are the same).
    */
   reconstructFamiliesFromSource(sourceEventId: string, targetEventId: string): { familiesCreated: number; guestsUpdated: number } {
-    const sourceGuests = this.getGuestsForEvent(sourceEventId);
     const sourceFamilies = this.getFamiliesForEvent(sourceEventId);
     const targetGuests = this.getGuestsForEvent(targetEventId);
-    const targetFamilies = this.getFamiliesForEvent(targetEventId);
 
     let familiesCreated = 0;
     let guestsUpdated = 0;
+
+    // Map from source family ID to target family ID to prevent re-using families
+    const sourceFamilyToTargetFamily = new Map<string, string>();
 
     // For each family in source event
     for (const sourceFamily of sourceFamilies) {
@@ -744,26 +787,57 @@ class DataStore {
         .map(id => this.guests.get(id))
         .filter((g): g is Guest => g !== undefined);
 
-      // Find matching guests in target event (by name)
-      const matchingTargetGuests = targetGuests.filter(targetGuest => {
-        // Skip if already in a family
-        if (targetGuest.familyId) return false;
+      if (sourceFamilyMembers.length === 0) continue;
 
+      // Find matching guests in target event (by name) that match THIS source family's members
+      const matchingTargetGuests = targetGuests.filter(targetGuest => {
         return sourceFamilyMembers.some(sourceMember =>
           sourceMember.firstName.toLowerCase() === targetGuest.firstName.toLowerCase() &&
           sourceMember.lastName.toLowerCase() === targetGuest.lastName.toLowerCase()
         );
       });
 
-      // If we have at least 2 matching guests, create a family
+      // If we have at least 2 matching guests, create/update a family
       if (matchingTargetGuests.length >= 2) {
-        // Check if family with same name already exists
-        let targetFamily = targetFamilies.find(f =>
-          f.name.toLowerCase() === sourceFamily.name.toLowerCase()
-        );
+        let targetFamily: Family | undefined;
+
+        // Check if we've already created a target family for this source family
+        const existingTargetFamilyId = sourceFamilyToTargetFamily.get(sourceFamily.id);
+        if (existingTargetFamilyId) {
+          targetFamily = this.families.get(existingTargetFamilyId);
+        }
 
         if (!targetFamily) {
-          // Create new family
+          // Look for an existing family that contains ONLY members from this source family
+          // and hasn't been claimed by another source family
+          const targetFamilies = this.getFamiliesForEvent(targetEventId);
+          const claimedFamilyIds = new Set(sourceFamilyToTargetFamily.values());
+
+          for (const family of targetFamilies) {
+            // Skip families already claimed by other source families
+            if (claimedFamilyIds.has(family.id)) continue;
+
+            // Check if this family's members are all from our source family
+            const familyMembers = family.members
+              .map(id => this.guests.get(id))
+              .filter((g): g is Guest => g !== undefined);
+
+            const allMembersMatch = familyMembers.length > 0 && familyMembers.every(member =>
+              sourceFamilyMembers.some(sourceMember =>
+                sourceMember.firstName.toLowerCase() === member.firstName.toLowerCase() &&
+                sourceMember.lastName.toLowerCase() === member.lastName.toLowerCase()
+              )
+            );
+
+            if (allMembersMatch) {
+              targetFamily = family;
+              break;
+            }
+          }
+        }
+
+        if (!targetFamily) {
+          // Create new family for this specific source family
           targetFamily = this.addFamily({
             eventId: targetEventId,
             name: sourceFamily.name,
@@ -772,8 +846,20 @@ class DataStore {
           familiesCreated++;
         }
 
-        // Add guests to the family
+        // Register this mapping
+        sourceFamilyToTargetFamily.set(sourceFamily.id, targetFamily.id);
+
+        // Add/move guests to the family
         for (const guest of matchingTargetGuests) {
+          // Remove from any existing family first (even if it's a different target family)
+          if (guest.familyId && guest.familyId !== targetFamily.id) {
+            const oldFamily = this.families.get(guest.familyId);
+            if (oldFamily) {
+              oldFamily.members = oldFamily.members.filter(id => id !== guest.id);
+              this.families.set(oldFamily.id, oldFamily);
+            }
+          }
+
           if (!targetFamily.members.includes(guest.id)) {
             targetFamily.members.push(guest.id);
             guest.familyId = targetFamily.id;
@@ -782,6 +868,14 @@ class DataStore {
           }
         }
         this.families.set(targetFamily.id, targetFamily);
+      }
+    }
+
+    // Clean up empty families
+    const targetFamilies = this.getFamiliesForEvent(targetEventId);
+    for (const family of targetFamilies) {
+      if (family.members.length === 0) {
+        this.families.delete(family.id);
       }
     }
 

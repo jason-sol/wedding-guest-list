@@ -51,7 +51,7 @@ import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { Guest, Family, CategoryInfo, RSVPStatus } from './types';
-import { fetchGuests, fetchFamilies, fetchCategories, fetchGuestPresence, exportData, importData, createEvent, GuestPresenceMap } from './api';
+import { fetchGuests, fetchFamilies, fetchCategories, fetchGuestPresence, importData, createEvent, GuestPresenceMap } from './api';
 import { useFilteredGuests } from './hooks/useFilteredGuests';
 import { useToast } from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
@@ -66,6 +66,7 @@ import EventSettings from './components/EventSettings';
 import Login from './components/Login';
 import ScrollToTop from './components/ScrollToTop';
 import ImportRsvpModal from './components/ImportRsvpModal';
+import ExportDataModal from './components/ExportDataModal';
 import { shouldUseWhiteText, getContrastAdjustedColor } from './components/CategoryTag';
 
 function App() {
@@ -87,13 +88,13 @@ function App() {
   const [newEventName, setNewEventName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [showUserManagement, setShowUserManagement] = useState(false);
   const [editingEvent, setEditingEvent] = useState<string | null>(null);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
   const [showImportRsvpModal, setShowImportRsvpModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const scrollPositionRef = useRef<number | null>(null);
   const shouldRestoreScrollRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -188,26 +189,9 @@ function App() {
     setCategories([]);
   };
 
-  const handleExport = async () => {
-    setIsExporting(true);
+  const handleExport = () => {
     setMoreMenuAnchor(null);
-    try {
-      const blob = await exportData();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `wedding-guest-list-data-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      showSuccess('Data exported successfully');
-    } catch (err) {
-      console.error('Export failed:', err);
-      showError('Failed to export data. Please try again.');
-    } finally {
-      setIsExporting(false);
-    }
+    setShowExportModal(true);
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -478,9 +462,9 @@ function App() {
                   open={Boolean(moreMenuAnchor)}
                   onClose={() => setMoreMenuAnchor(null)}
                 >
-                  <MenuItem onClick={handleExport} disabled={isExporting}>
+                  <MenuItem onClick={handleExport}>
                     <FileDownloadIcon sx={{ mr: 1 }} />
-                    {isExporting ? 'Exporting...' : 'Export Data'}
+                    Export Data
                   </MenuItem>
                   <MenuItem
                     onClick={() => {
@@ -769,6 +753,20 @@ function App() {
             setShowImportRsvpModal(false);
             loadData(true);
             showSuccess('RSVP data imported successfully');
+          }}
+        />
+      )}
+
+      {showExportModal && currentEvent && (
+        <ExportDataModal
+          guests={guests}
+          families={families}
+          categories={categories}
+          events={events}
+          currentEventId={currentEvent.id}
+          onClose={() => setShowExportModal(false)}
+          onSuccess={(message) => {
+            showSuccess(message);
           }}
         />
       )}
