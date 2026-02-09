@@ -414,6 +414,31 @@ export const ImportDataSchema = z.object({
 );
 
 // ============================================================
+// Backup schemas
+// ============================================================
+
+/**
+ * Schema for updating backup settings.
+ */
+export const UpdateBackupSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  maxBackups: z.number().int().min(1).max(10).optional(),
+  backupTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be in HH:MM 24-hour format').optional(),
+});
+
+/**
+ * Schema for restore backup request.
+ */
+export const RestoreBackupSchema = z.object({
+  filename: z.string().regex(/^data-backup-[\d-]+\.json$/, 'Invalid backup filename'),
+});
+
+/**
+ * Validates a backup filename to prevent path traversal.
+ */
+export const BACKUP_FILENAME_REGEX = /^data-backup-[\d-]+\.json$/;
+
+// ============================================================
 // Auth schemas
 // ============================================================
 
@@ -474,3 +499,5 @@ export type ImportDataInput = z.infer<typeof ImportDataSchema>;
 export type LoginInput = z.infer<typeof LoginSchema>;
 export type BulkRsvpUpdateInput = z.infer<typeof BulkRsvpUpdateSchema>;
 export type JoyImportInput = z.infer<typeof JoyImportSchema>;
+export type UpdateBackupSettingsInput = z.infer<typeof UpdateBackupSettingsSchema>;
+export type RestoreBackupInput = z.infer<typeof RestoreBackupSchema>;

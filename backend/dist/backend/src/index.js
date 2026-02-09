@@ -29,8 +29,10 @@ const events_1 = __importDefault(require("./routes/events"));
 const users_1 = __importDefault(require("./routes/users"));
 const auth_1 = __importDefault(require("./routes/auth"));
 const data_1 = __importDefault(require("./routes/data"));
+const backups_1 = __importDefault(require("./routes/backups"));
 const auth_2 = require("./middleware/auth");
 const permissions_1 = require("./middleware/permissions");
+const backupService_1 = require("./backupService");
 // Initialize and validate config early - will throw if required vars are missing
 const config = (0, config_1.getConfig)();
 const app = (0, express_1.default)();
@@ -75,9 +77,10 @@ app.use('/api/events/:eventId/guests', auth_2.authMiddleware, guests_1.default);
 app.use('/api/events/:eventId/families', auth_2.authMiddleware, families_1.default);
 // User management routes (owner only)
 app.use('/api/users', auth_2.authMiddleware, permissions_1.requireOwner, users_1.default);
-// Global routes (categories, data import/export)
+// Global routes (categories, data import/export, backups)
 app.use('/api/categories', auth_2.authMiddleware, categories_1.default);
 app.use('/api/data', auth_2.authMiddleware, data_1.default);
+app.use('/api/backups', auth_2.authMiddleware, backups_1.default);
 // Async startup to initialize stores
 async function startServer() {
     try {
@@ -86,6 +89,9 @@ async function startServer() {
         // Initialize session store (loads persisted sessions)
         const sessionStore = (0, sessionStore_1.getSessionStore)();
         await sessionStore.initialize();
+        // Initialize backup service (starts scheduled backups)
+        const backupService = (0, backupService_1.getBackupService)();
+        await backupService.initialize();
         const server = app.listen(config.port, () => {
             console.log(`Server running on http://localhost:${config.port} [${config.env}]`);
         });
@@ -95,10 +101,11 @@ async function startServer() {
             // Stop accepting new connections
             server.close(async () => {
                 console.log('HTTP server closed');
-                // Save data and sessions before exit
+                // Save data, sessions, and create shutdown backup before exit
                 await Promise.all([
                     store_1.store.flush().then(() => console.log('Data saved')),
                     sessionStore.shutdown().then(() => console.log('Sessions saved')),
+                    backupService.shutdown().then(() => console.log('Backup service stopped')),
                 ]);
                 process.exit(0);
             });

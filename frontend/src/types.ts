@@ -10,4 +10,5 @@ export type {
   PermissionLevel,
   AuthUser,
   RSVPStatus,
+  BackupSettings,
 } from '../../shared/types/index';

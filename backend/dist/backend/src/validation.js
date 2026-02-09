@@ -4,7 +4,7 @@
  * Provides type-safe validation for all API inputs and data imports.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LoginSchema = exports.ImportDataSchema = exports.PermissionSchema = exports.SetPermissionSchema = exports.UserSchema = exports.UpdateUserSchema = exports.CreateUserSchema = exports.EventSchema = exports.ReorderEventsSchema = exports.UpdateEventSchema = exports.CreateEventSchema = exports.CategoryInfoSchema = exports.CreateCategorySchema = exports.FamilySchema = exports.ReconstructFamiliesSchema = exports.CopyFamilySchema = exports.AddGuestToFamilySchema = exports.ReorderMembersSchema = exports.UpdateFamilySchema = exports.CreateFamilySchema = exports.FamilyMemberInputSchema = exports.JoyImportSchema = exports.BulkRsvpUpdateSchema = exports.CopyGuestSchema = exports.GuestSchema = exports.UpdateGuestSchema = exports.CreateGuestSchema = exports.PermissionLevelSchema = exports.RSVPStatusSchema = void 0;
+exports.LoginSchema = exports.BACKUP_FILENAME_REGEX = exports.RestoreBackupSchema = exports.UpdateBackupSettingsSchema = exports.ImportDataSchema = exports.PermissionSchema = exports.SetPermissionSchema = exports.UserSchema = exports.UpdateUserSchema = exports.CreateUserSchema = exports.EventSchema = exports.ReorderEventsSchema = exports.UpdateEventSchema = exports.CreateEventSchema = exports.CategoryInfoSchema = exports.CreateCategorySchema = exports.FamilySchema = exports.ReconstructFamiliesSchema = exports.CopyFamilySchema = exports.AddGuestToFamilySchema = exports.ReorderMembersSchema = exports.UpdateFamilySchema = exports.CreateFamilySchema = exports.FamilyMemberInputSchema = exports.JoyImportSchema = exports.BulkRsvpUpdateSchema = exports.CopyGuestSchema = exports.GuestSchema = exports.UpdateGuestSchema = exports.CreateGuestSchema = exports.PermissionLevelSchema = exports.RSVPStatusSchema = void 0;
 exports.validate = validate;
 const zod_1 = require("zod");
 const config_1 = require("./config");
@@ -364,6 +364,27 @@ exports.ImportDataSchema = zod_1.z.object({
     }
     return true;
 }, { message: 'Invalid data: some families reference non-existent events' });
+// ============================================================
+// Backup schemas
+// ============================================================
+/**
+ * Schema for updating backup settings.
+ */
+exports.UpdateBackupSettingsSchema = zod_1.z.object({
+    enabled: zod_1.z.boolean().optional(),
+    maxBackups: zod_1.z.number().int().min(1).max(10).optional(),
+    backupTime: zod_1.z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be in HH:MM 24-hour format').optional(),
+});
+/**
+ * Schema for restore backup request.
+ */
+exports.RestoreBackupSchema = zod_1.z.object({
+    filename: zod_1.z.string().regex(/^data-backup-[\d-]+\.json$/, 'Invalid backup filename'),
+});
+/**
+ * Validates a backup filename to prevent path traversal.
+ */
+exports.BACKUP_FILENAME_REGEX = /^data-backup-[\d-]+\.json$/;
 // ============================================================
 // Auth schemas
 // ============================================================

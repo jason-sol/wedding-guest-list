@@ -67,3 +67,10 @@ export interface AuthUser {
   userId: string;
   isOwner: boolean;
 }
+
+// Backup settings for automated and manual backups
+export interface BackupSettings {
+  enabled: boolean;       // auto-backup on/off
+  maxBackups: number;     // rolling retention count (1-50)
+  backupTime: string;     // HH:MM 24-hour format
+}

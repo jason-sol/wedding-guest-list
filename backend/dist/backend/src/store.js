@@ -70,6 +70,12 @@ class DataStore {
         this.users = new Map();
         this.events = new Map();
         this.permissions = new Map(); // key: `${userId}-${eventId}`
+        // Backup settings
+        this.backupSettings = {
+            enabled: true,
+            maxBackups: 5,
+            backupTime: '02:00',
+        };
         // ID counters
         this.nextGuestId = 1;
         this.nextFamilyId = 1;
@@ -286,6 +292,10 @@ class DataStore {
                     this.permissions.set(key, perm);
                 });
             }
+            // Load backup settings
+            if (parsed.backupSettings) {
+                this.backupSettings = { ...this.backupSettings, ...parsed.backupSettings };
+            }
             console.log(`Loaded: ${this.guests.size} guests, ${this.families.size} families, ${this.categories.size} categories, ${this.users.size} users, ${this.events.size} events`);
         }
         catch (error) {
@@ -335,6 +345,7 @@ class DataStore {
                 users: Array.from(this.users.values()),
                 events: Array.from(this.events.values()),
                 permissions: Array.from(this.permissions.values()),
+                backupSettings: this.backupSettings,
             };
             const tempPath = `${this.dataFilePath}.tmp`;
             await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf-8');
@@ -930,6 +941,17 @@ class DataStore {
         });
         this.scheduleSave();
         return updatedCategory;
+    }
+    // ============================================================
+    // Backup settings operations
+    // ============================================================
+    getBackupSettings() {
+        return { ...this.backupSettings };
+    }
+    updateBackupSettings(updates) {
+        this.backupSettings = { ...this.backupSettings, ...updates };
+        this.scheduleSave();
+        return { ...this.backupSettings };
     }
     // ============================================================
     // Utility operations

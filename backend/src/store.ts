@@ -4,7 +4,7 @@
  * Supports multi-user permissions and event-scoped guest lists.
  */
 
-import { Guest, Family, CategoryInfo, User, Event, UserEventPermission, PermissionLevel } from '../../shared/types/index';
+import { Guest, Family, CategoryInfo, User, Event, UserEventPermission, PermissionLevel, BackupSettings } from '../../shared/types/index';
 import { getCategoryColor } from '../../shared/utils/colors';
 import * as fs from 'fs/promises';
 import { getConfig } from './config';
@@ -50,6 +50,7 @@ interface StoredData {
   users?: User[];
   events?: Event[];
   permissions?: UserEventPermission[];
+  backupSettings?: BackupSettings;
 }
 
 /**
@@ -66,6 +67,13 @@ class DataStore {
   private users: Map<string, User> = new Map();
   private events: Map<string, Event> = new Map();
   private permissions: Map<string, UserEventPermission> = new Map(); // key: `${userId}-${eventId}`
+
+  // Backup settings
+  private backupSettings: BackupSettings = {
+    enabled: true,
+    maxBackups: 5,
+    backupTime: '02:00',
+  };
 
   // ID counters
   private nextGuestId = 1;
@@ -322,6 +330,11 @@ class DataStore {
         });
       }
 
+      // Load backup settings
+      if (parsed.backupSettings) {
+        this.backupSettings = { ...this.backupSettings, ...parsed.backupSettings };
+      }
+
       console.log(`Loaded: ${this.guests.size} guests, ${this.families.size} families, ${this.categories.size} categories, ${this.users.size} users, ${this.events.size} events`);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -373,6 +386,7 @@ class DataStore {
         users: Array.from(this.users.values()),
         events: Array.from(this.events.values()),
         permissions: Array.from(this.permissions.values()),
+        backupSettings: this.backupSettings,
       };
 
       const tempPath = `${this.dataFilePath}.tmp`;
@@ -1082,6 +1096,20 @@ class DataStore {
 
     this.scheduleSave();
     return updatedCategory;
+  }
+
+  // ============================================================
+  // Backup settings operations
+  // ============================================================
+
+  getBackupSettings(): BackupSettings {
+    return { ...this.backupSettings };
+  }
+
+  updateBackupSettings(updates: Partial<BackupSettings>): BackupSettings {
+    this.backupSettings = { ...this.backupSettings, ...updates };
+    this.scheduleSave();
+    return { ...this.backupSettings };
   }
 
   // ============================================================

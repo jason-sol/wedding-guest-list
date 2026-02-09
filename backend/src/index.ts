@@ -26,8 +26,10 @@ import eventsRouter from './routes/events';
 import usersRouter from './routes/users';
 import authRouter from './routes/auth';
 import dataRouter from './routes/data';
+import backupsRouter from './routes/backups';
 import { authMiddleware } from './middleware/auth';
 import { requireOwner } from './middleware/permissions';
+import { getBackupService } from './backupService';
 
 // Initialize and validate config early - will throw if required vars are missing
 const config = getConfig();
@@ -82,9 +84,10 @@ app.use('/api/events/:eventId/families', authMiddleware, familiesRouter);
 // User management routes (owner only)
 app.use('/api/users', authMiddleware, requireOwner, usersRouter);
 
-// Global routes (categories, data import/export)
+// Global routes (categories, data import/export, backups)
 app.use('/api/categories', authMiddleware, categoriesRouter);
 app.use('/api/data', authMiddleware, dataRouter);
+app.use('/api/backups', authMiddleware, backupsRouter);
 
 // Async startup to initialize stores
 async function startServer() {
@@ -95,6 +98,10 @@ async function startServer() {
     // Initialize session store (loads persisted sessions)
     const sessionStore = getSessionStore();
     await sessionStore.initialize();
+
+    // Initialize backup service (starts scheduled backups)
+    const backupService = getBackupService();
+    await backupService.initialize();
 
     const server = app.listen(config.port, () => {
       console.log(`Server running on http://localhost:${config.port} [${config.env}]`);
@@ -108,10 +115,11 @@ async function startServer() {
       server.close(async () => {
         console.log('HTTP server closed');
 
-        // Save data and sessions before exit
+        // Save data, sessions, and create shutdown backup before exit
         await Promise.all([
           store.flush().then(() => console.log('Data saved')),
           sessionStore.shutdown().then(() => console.log('Sessions saved')),
+          backupService.shutdown().then(() => console.log('Backup service stopped')),
         ]);
 
         process.exit(0);

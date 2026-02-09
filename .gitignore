@@ -7,4 +7,6 @@ openspec/archive
 .env.local
 .env.*.local
 
+data/
+
 .DS_Store

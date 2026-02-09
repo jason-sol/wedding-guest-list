@@ -45,6 +45,7 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import BackupIcon from '@mui/icons-material/Backup';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckIcon from '@mui/icons-material/Check';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
@@ -67,6 +68,7 @@ import Login from './components/Login';
 import ScrollToTop from './components/ScrollToTop';
 import ImportRsvpModal from './components/ImportRsvpModal';
 import ExportDataModal from './components/ExportDataModal';
+import BackupManagement from './components/BackupManagement';
 import { shouldUseWhiteText, getContrastAdjustedColor } from './components/CategoryTag';
 
 function App() {
@@ -95,6 +97,7 @@ function App() {
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
   const [showImportRsvpModal, setShowImportRsvpModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showBackupModal, setShowBackupModal] = useState(false);
   const scrollPositionRef = useRef<number | null>(null);
   const shouldRestoreScrollRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -486,6 +489,16 @@ function App() {
                     <FileUploadIcon sx={{ mr: 1 }} />
                     Import RSVP from JOY
                   </MenuItem>
+                  <Divider />
+                  <MenuItem
+                    onClick={() => {
+                      setMoreMenuAnchor(null);
+                      setShowBackupModal(true);
+                    }}
+                  >
+                    <BackupIcon sx={{ mr: 1 }} />
+                    Backup Management
+                  </MenuItem>
                 </Menu>
                 <input
                   type="file"
@@ -767,6 +780,16 @@ function App() {
           onClose={() => setShowExportModal(false)}
           onSuccess={(message) => {
             showSuccess(message);
+          }}
+        />
+      )}
+
+      {showBackupModal && (
+        <BackupManagement
+          onClose={() => setShowBackupModal(false)}
+          onDataRestored={() => {
+            refreshEvents();
+            loadData();
           }}
         />
       )}

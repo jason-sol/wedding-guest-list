@@ -1,4 +1,4 @@
-import { Guest, Family, CategoryInfo, Event, UserEventPermission, PermissionLevel, RSVPStatus } from './types';
+import { Guest, Family, CategoryInfo, Event, UserEventPermission, PermissionLevel, RSVPStatus, BackupSettings } from './types';
 
 /**
  * Base URL for all API calls.
@@ -627,4 +627,73 @@ export async function importJoyCsv(
   handleAuthError(response);
   if (!response.ok) await handleErrorResponse(response, 'Failed to import CSV');
   return extractData<JoyImportResult>(response);
+}
+
+// ============================================================
+// Backup operations
+// ============================================================
+
+export interface BackupInfo {
+  filename: string;
+  timestamp: string;
+  size: number;
+}
+
+export async function fetchBackups(): Promise<BackupInfo[]> {
+  const response = await fetch(`${API_BASE}/backups`, {
+    headers: getAuthHeaders(),
+  });
+  handleAuthError(response);
+  if (!response.ok) await handleErrorResponse(response, 'Failed to fetch backups');
+  return extractData<BackupInfo[]>(response);
+}
+
+export async function createBackup(): Promise<BackupInfo> {
+  const response = await fetch(`${API_BASE}/backups`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  handleAuthError(response);
+  if (!response.ok) await handleErrorResponse(response, 'Failed to create backup');
+  return extractData<BackupInfo>(response);
+}
+
+export async function restoreBackup(filename: string): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE}/backups/restore`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ filename }),
+  });
+  handleAuthError(response);
+  if (!response.ok) await handleErrorResponse(response, 'Failed to restore backup');
+  return extractData<{ message: string }>(response);
+}
+
+export async function deleteBackupFile(filename: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/backups/${encodeURIComponent(filename)}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  handleAuthError(response);
+  if (!response.ok) await handleErrorResponse(response, 'Failed to delete backup');
+}
+
+export async function fetchBackupSettings(): Promise<BackupSettings> {
+  const response = await fetch(`${API_BASE}/backups/settings`, {
+    headers: getAuthHeaders(),
+  });
+  handleAuthError(response);
+  if (!response.ok) await handleErrorResponse(response, 'Failed to fetch backup settings');
+  return extractData<BackupSettings>(response);
+}
+
+export async function updateBackupSettings(settings: Partial<BackupSettings>): Promise<BackupSettings> {
+  const response = await fetch(`${API_BASE}/backups/settings`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(settings),
+  });
+  handleAuthError(response);
+  if (!response.ok) await handleErrorResponse(response, 'Failed to update backup settings');
+  return extractData<BackupSettings>(response);
 }

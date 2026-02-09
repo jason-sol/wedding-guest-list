@@ -87,11 +87,6 @@ export default function EditGuestForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!firstName.trim() || !lastName.trim()) {
-      alert('Please enter both first and last name');
-      return;
-    }
-
     setIsSubmitting(true);
     try {
       await updateGuest(eventId, guest.id, {
@@ -180,7 +175,6 @@ export default function EditGuestForm({
               label="First Name"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
-              required
               autoFocus
               disabled={isSubmitting}
               slotProps={{ htmlInput: { maxLength: 100 } }}
@@ -191,7 +185,6 @@ export default function EditGuestForm({
               label="Last Name"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
-              required
               disabled={isSubmitting}
               slotProps={{ htmlInput: { maxLength: 100 } }}
             />
