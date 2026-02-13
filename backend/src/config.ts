@@ -180,9 +180,12 @@ function buildConfig(): Config {
     );
   }
 
-  // Data file path - resolve relative to backend directory
-  const dataDirectory = path.resolve(__dirname, '../../data');
-  const dataFilePath = path.join(dataDirectory, 'data.json');
+  // Data file path - use env var if set, otherwise resolve relative to backend directory
+  const dataFilePathEnv = process.env.DATA_FILE_PATH?.trim();
+  const dataFilePath = dataFilePathEnv
+    ? path.resolve(dataFilePathEnv)
+    : path.join(path.resolve(__dirname, '../../data'), 'data.json');
+  const dataDirectory = path.dirname(dataFilePath);
 
   return {
     port: getEnvInt('PORT', 5000),
