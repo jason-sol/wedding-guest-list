@@ -79,9 +79,12 @@ backup:
 #   make deploy-logs            		 # Tail server logs
 #   make deploy-rollback        		 # Restore most recent backup
 #
-# Load .env file (contains DEPLOY_HOST, DEPLOY_PASS, DEPLOY_REPO, DEPLOY_DATA_DIR)
+# Load .env file for deployment vars only
 -include .env
-export
+export DEPLOY_HOST
+export DEPLOY_PASS
+export DEPLOY_REPO
+export DEPLOY_DATA_DIR
 
 SSH := sshpass -p $(DEPLOY_PASS) ssh -o StrictHostKeyChecking=no $(DEPLOY_HOST)
 
