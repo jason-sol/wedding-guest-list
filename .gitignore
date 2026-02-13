@@ -7,6 +7,14 @@ openspec/archive
 .env.local
 .env.*.local
 
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Data persistence
 data/
 
+# OS files
 .DS_Store
