@@ -111,6 +111,8 @@ endif
 		git stash --quiet 2>/dev/null; \
 		git pull && \
 		echo "==> Rebuilding and restarting containers..." && \
+		export DOCKER_CONFIG=/tmp/.docker && \
+		mkdir -p /tmp/.docker && \
 		docker compose up -d --build && \
 		echo "==> Waiting for health checks..." && \
 		sleep 10 && \
