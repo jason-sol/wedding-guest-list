@@ -10,7 +10,15 @@
     "build:frontend": "cd frontend && npm run build",
     "test:backend": "cd backend && npm test",
     "test:frontend": "cd frontend && npm test",
-    "test": "npm run test:backend && npm run test:frontend"
+    "test": "npm run test:backend && npm run test:frontend",
+    "lint:backend": "cd backend && npm run lint",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint": "npm run lint:backend && npm run lint:frontend",
+    "lint:fix": "cd backend && npm run lint:fix && cd ../frontend && npm run lint:fix",
+    "format:backend": "cd backend && npm run format",
+    "format:frontend": "cd frontend && npm run format",
+    "format": "npm run format:backend && npm run format:frontend",
+    "format:fix": "cd backend && npm run format:fix && cd ../frontend && npm run format:fix"
   },
   "keywords": [],
   "author": "jason",

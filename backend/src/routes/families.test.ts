@@ -1,19 +1,28 @@
 import { store } from '../store';
-import { Category } from '../../../shared/types/index';
+
+const TEST_EVENT_ID = 'event-1';
 
 describe('Family Store', () => {
-  beforeEach(() => {
-    store.clear();
+  beforeEach(async () => {
+    await store.clear();
+    store.addEvent({
+      name: 'Ceremony',
+      order: 0,
+      createdAt: Date.now(),
+      createdBy: 'test',
+    });
   });
 
   test('should create a family with members', () => {
     const guest1 = store.addGuest({
+      eventId: TEST_EVENT_ID,
       firstName: 'John',
       lastName: 'Doe',
       familyId: null,
       tags: [],
     });
     const guest2 = store.addGuest({
+      eventId: TEST_EVENT_ID,
       firstName: 'Jane',
       lastName: 'Doe',
       familyId: null,
@@ -21,6 +30,7 @@ describe('Family Store', () => {
     });
 
     const family = store.addFamily({
+      eventId: TEST_EVENT_ID,
       name: 'Doe Family',
       members: [guest1.id, guest2.id],
     });
@@ -33,22 +43,22 @@ describe('Family Store', () => {
   });
 
   test('should retrieve all families', () => {
-    store.addFamily({ name: 'Family 1', members: [] });
-    store.addFamily({ name: 'Family 2', members: [] });
+    store.addFamily({ eventId: TEST_EVENT_ID, name: 'Family 1', members: [] });
+    store.addFamily({ eventId: TEST_EVENT_ID, name: 'Family 2', members: [] });
 
-    const families = store.getAllFamilies();
+    const families = store.getFamiliesForEvent(TEST_EVENT_ID);
     expect(families).toHaveLength(2);
   });
 
   test('should update family name', () => {
-    const family = store.addFamily({ name: 'Old Name', members: [] });
+    const family = store.addFamily({ eventId: TEST_EVENT_ID, name: 'Old Name', members: [] });
     const updated = store.updateFamily(family.id, { name: 'New Name' });
 
     expect(updated?.name).toBe('New Name');
   });
 
   test('should delete a family', () => {
-    const family = store.addFamily({ name: 'Test Family', members: [] });
+    const family = store.addFamily({ eventId: TEST_EVENT_ID, name: 'Test Family', members: [] });
     const deleted = store.deleteFamily(family.id);
 
     expect(deleted).toBe(true);
@@ -57,12 +67,13 @@ describe('Family Store', () => {
 
   test('should add guest to family and update guest familyId', () => {
     const guest = store.addGuest({
+      eventId: TEST_EVENT_ID,
       firstName: 'John',
       lastName: 'Doe',
       familyId: null,
       tags: [],
     });
-    const family = store.addFamily({ name: 'Doe Family', members: [] });
+    const family = store.addFamily({ eventId: TEST_EVENT_ID, name: 'Doe Family', members: [] });
 
     store.updateFamily(family.id, { members: [guest.id] });
     store.updateGuest(guest.id, { familyId: family.id });
@@ -76,12 +87,13 @@ describe('Family Store', () => {
 
   test('should remove guest from family', () => {
     const guest = store.addGuest({
+      eventId: TEST_EVENT_ID,
       firstName: 'John',
       lastName: 'Doe',
       familyId: null,
       tags: [],
     });
-    const family = store.addFamily({ name: 'Doe Family', members: [guest.id] });
+    const family = store.addFamily({ eventId: TEST_EVENT_ID, name: 'Doe Family', members: [guest.id] });
     store.updateGuest(guest.id, { familyId: family.id });
 
     store.updateFamily(family.id, { members: [] });

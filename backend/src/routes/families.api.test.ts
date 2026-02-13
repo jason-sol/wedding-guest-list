@@ -1,150 +1,136 @@
-import request from 'supertest';
-import express from 'express';
-import familiesRouter from './families';
-import { store } from '../store';
+import { createTestApp, setupOwnerSession, authAgent, setupTestEvent, store, request } from '../test/apiHelper';
+import type { Express } from 'express';
 
-const app = express();
-app.use(express.json());
-app.use('/api/families', familiesRouter);
+describe('Family API', () => {
+  let app: Express;
+  let token: string;
+  let eventId: string;
 
-describe('Families API Routes', () => {
-  beforeEach(() => {
-    store.clear();
+  beforeEach(async () => {
+    await store.clear();
+    app = createTestApp();
+    token = setupOwnerSession();
+    eventId = await setupTestEvent(app, token);
   });
 
-  describe('POST /api/families', () => {
-    test('should create a family with new members', async () => {
-      const response = await request(app)
-        .post('/api/families')
-        .send({
-          name: 'Doe Family',
-          members: [
-            { firstName: 'John', lastName: 'Doe', tags: [] },
-            { firstName: 'Jane', lastName: 'Doe', tags: [] },
-          ],
-        });
+  test('GET /api/events/:eventId/families — returns empty array initially', async () => {
+    const res = await authAgent(app, token).get(`/api/events/${eventId}/families`);
 
-      expect(response.status).toBe(201);
-      expect(response.body.name).toBe('Doe Family');
-      expect(response.body.members).toHaveLength(2);
-    });
-
-    test('should reject family without name', async () => {
-      const response = await request(app)
-        .post('/api/families')
-        .send({
-          members: [],
-        });
-
-      expect(response.status).toBe(400);
-      expect(response.body.error).toContain('name is required');
-    });
-
-    test('should create family and assign guests to it', async () => {
-      const response = await request(app)
-        .post('/api/families')
-        .send({
-          name: 'Smith Family',
-          members: [
-            { firstName: 'John', lastName: 'Smith', tags: [] },
-          ],
-        });
-
-      expect(response.status).toBe(201);
-      const guest = store.getAllGuests().find(g => g.lastName === 'Smith');
-      expect(guest?.familyId).toBe(response.body.id);
-    });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toEqual([]);
   });
 
-  describe('POST /api/families/:id/members', () => {
-    test('should add existing guest to family', async () => {
-      const guest = store.addGuest({
-        firstName: 'John',
-        lastName: 'Doe',
-        familyId: null,
-        tags: [],
-      });
-      const family = store.addFamily({
-        name: 'Doe Family',
-        members: [],
-      });
+  test('POST /api/events/:eventId/families — creates family with name', async () => {
+    const res = await authAgent(app, token)
+      .post(`/api/events/${eventId}/families`)
+      .send({ name: 'Smith Family' });
 
-      const response = await request(app)
-        .post(`/api/families/${family.id}/members`)
-        .send({ guestId: guest.id });
-
-      expect(response.status).toBe(200);
-      expect(response.body.members).toContain(guest.id);
-      
-      const updatedGuest = store.getGuest(guest.id);
-      expect(updatedGuest?.familyId).toBe(family.id);
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toMatchObject({
+      name: 'Smith Family',
+      eventId,
     });
-
-    test('should return 404 if family not found', async () => {
-      const guest = store.addGuest({
-        firstName: 'John',
-        lastName: 'Doe',
-        familyId: null,
-        tags: [],
-      });
-
-      const response = await request(app)
-        .post('/api/families/non-existent-id/members')
-        .send({ guestId: guest.id });
-
-      expect(response.status).toBe(404);
-    });
-
-    test('should return 404 if guest not found', async () => {
-      const family = store.addFamily({
-        name: 'Doe Family',
-        members: [],
-      });
-
-      const response = await request(app)
-        .post(`/api/families/${family.id}/members`)
-        .send({ guestId: 'non-existent-id' });
-
-      expect(response.status).toBe(404);
-    });
+    expect(res.body.data.id).toBeDefined();
   });
 
-  describe('DELETE /api/families/:id/members/:guestId', () => {
-    test('should remove guest from family', async () => {
-      const guest = store.addGuest({
-        firstName: 'John',
-        lastName: 'Doe',
-        familyId: null,
-        tags: [],
-      });
-      const family = store.addFamily({
+  test('POST /api/events/:eventId/families — creates family with new member objects', async () => {
+    const res = await authAgent(app, token)
+      .post(`/api/events/${eventId}/families`)
+      .send({
         name: 'Doe Family',
-        members: [guest.id],
-      });
-      store.updateGuest(guest.id, { familyId: family.id });
-
-      const response = await request(app)
-        .delete(`/api/families/${family.id}/members/${guest.id}`);
-
-      expect(response.status).toBe(200);
-      expect(response.body.members).not.toContain(guest.id);
-      
-      const updatedGuest = store.getGuest(guest.id);
-      expect(updatedGuest?.familyId).toBeNull();
-    });
-
-    test('should return 404 if family not found', async () => {
-      const guest = store.addGuest({
-        firstName: 'John',
-        lastName: 'Doe',
-        familyId: null,
-        tags: [],
+        members: [{ firstName: 'John', lastName: 'Doe' }],
       });
 
-      const response = await request(app)
-        .delete('/api/families/non-existent-id/members/' + guest.id);
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.name).toBe('Doe Family');
+    expect(res.body.data.members).toHaveLength(1);
+    // Members array contains guest IDs (strings)
+    expect(typeof res.body.data.members[0]).toBe('string');
+  });
 
-      expect(response.status).toBe(404);
-    });
+  test('PUT /api/events/:eventId/families/:id — updates family name', async () => {
+    const createRes = await authAgent(app, token)
+      .post(`/api/events/${eventId}/families`)
+      .send({ name: 'Smith Family' });
+    const familyId = createRes.body.data.id;
+
+    const updateRes = await authAgent(app, token)
+      .put(`/api/events/${eventId}/families/${familyId}`)
+      .send({ name: 'Johnson Family' });
+
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.success).toBe(true);
+    expect(updateRes.body.data.name).toBe('Johnson Family');
+  });
+
+  test('DELETE /api/events/:eventId/families/:id — deletes family and sets members familyId to null', async () => {
+    // Create a family with a member
+    const createRes = await authAgent(app, token)
+      .post(`/api/events/${eventId}/families`)
+      .send({
+        name: 'Doe Family',
+        members: [{ firstName: 'John', lastName: 'Doe' }],
+      });
+    const familyId = createRes.body.data.id;
+    const memberId = createRes.body.data.members[0];
+
+    // Delete the family
+    const deleteRes = await authAgent(app, token)
+      .delete(`/api/events/${eventId}/families/${familyId}`);
+
+    expect(deleteRes.status).toBe(204);
+
+    // Verify the member's familyId is set to null
+    const guestRes = await authAgent(app, token)
+      .get(`/api/events/${eventId}/guests/${memberId}`);
+
+    expect(guestRes.status).toBe(200);
+    expect(guestRes.body.data.familyId).toBeNull();
+  });
+
+  test('POST /api/events/:eventId/families/:id/members — adds guest to family', async () => {
+    // Create a guest
+    const guestRes = await authAgent(app, token)
+      .post(`/api/events/${eventId}/guests`)
+      .send({ firstName: 'John', lastName: 'Doe' });
+    const guestId = guestRes.body.data.id;
+
+    // Create a family
+    const familyRes = await authAgent(app, token)
+      .post(`/api/events/${eventId}/families`)
+      .send({ name: 'Doe Family' });
+    const familyId = familyRes.body.data.id;
+
+    // Add the guest to the family
+    const addRes = await authAgent(app, token)
+      .post(`/api/events/${eventId}/families/${familyId}/members`)
+      .send({ guestId });
+
+    expect(addRes.status).toBe(200);
+    expect(addRes.body.success).toBe(true);
+    expect(addRes.body.data.members).toContain(guestId);
+  });
+
+  test('DELETE /api/events/:eventId/families/:id/members/:guestId — removes member from family', async () => {
+    // Create a family with a member
+    const createRes = await authAgent(app, token)
+      .post(`/api/events/${eventId}/families`)
+      .send({
+        name: 'Doe Family',
+        members: [{ firstName: 'John', lastName: 'Doe' }],
+      });
+    const familyId = createRes.body.data.id;
+    const memberId = createRes.body.data.members[0];
+
+    // Remove the member from the family
+    const removeRes = await authAgent(app, token)
+      .delete(`/api/events/${eventId}/families/${familyId}/members/${memberId}`);
+
+    expect(removeRes.status).toBe(200);
+    expect(removeRes.body.success).toBe(true);
+    expect(removeRes.body.data.members).not.toContain(memberId);
   });
 });

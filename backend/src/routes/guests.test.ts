@@ -1,17 +1,24 @@
 import { store } from '../store';
-import { Category } from '../../../shared/types/index';
+
+const TEST_EVENT_ID = 'event-1';
 
 describe('Guest Store Sorting', () => {
-  beforeEach(() => {
-    store.clear();
+  beforeEach(async () => {
+    await store.clear();
+    store.addEvent({
+      name: 'Ceremony',
+      order: 0,
+      createdAt: Date.now(),
+      createdBy: 'test',
+    });
   });
 
   test('should sort guests by first name', () => {
-    store.addGuest({ firstName: 'Zoe', lastName: 'Adams', familyId: null, tags: [] });
-    store.addGuest({ firstName: 'Alice', lastName: 'Brown', familyId: null, tags: [] });
-    store.addGuest({ firstName: 'Bob', lastName: 'Clark', familyId: null, tags: [] });
+    store.addGuest({ eventId: TEST_EVENT_ID, firstName: 'Zoe', lastName: 'Adams', familyId: null, tags: [] });
+    store.addGuest({ eventId: TEST_EVENT_ID, firstName: 'Alice', lastName: 'Brown', familyId: null, tags: [] });
+    store.addGuest({ eventId: TEST_EVENT_ID, firstName: 'Bob', lastName: 'Clark', familyId: null, tags: [] });
 
-    const guests = store.getAllGuests();
+    const guests = store.getGuestsForEvent(TEST_EVENT_ID);
     const sorted = guests.sort((a, b) => a.firstName.localeCompare(b.firstName));
 
     expect(sorted[0].firstName).toBe('Alice');
@@ -20,11 +27,11 @@ describe('Guest Store Sorting', () => {
   });
 
   test('should sort guests by last name', () => {
-    store.addGuest({ firstName: 'John', lastName: 'Zebra', familyId: null, tags: [] });
-    store.addGuest({ firstName: 'Jane', lastName: 'Adams', familyId: null, tags: [] });
-    store.addGuest({ firstName: 'Bob', lastName: 'Brown', familyId: null, tags: [] });
+    store.addGuest({ eventId: TEST_EVENT_ID, firstName: 'John', lastName: 'Zebra', familyId: null, tags: [] });
+    store.addGuest({ eventId: TEST_EVENT_ID, firstName: 'Jane', lastName: 'Adams', familyId: null, tags: [] });
+    store.addGuest({ eventId: TEST_EVENT_ID, firstName: 'Bob', lastName: 'Brown', familyId: null, tags: [] });
 
-    const guests = store.getAllGuests();
+    const guests = store.getGuestsForEvent(TEST_EVENT_ID);
     const sorted = guests.sort((a, b) => a.lastName.localeCompare(b.lastName));
 
     expect(sorted[0].lastName).toBe('Adams');
@@ -34,6 +41,7 @@ describe('Guest Store Sorting', () => {
 
   test('should handle guests with categories', () => {
     const guest = store.addGuest({
+      eventId: TEST_EVENT_ID,
       firstName: 'John',
       lastName: 'Doe',
       familyId: null,
@@ -47,6 +55,7 @@ describe('Guest Store Sorting', () => {
 
   test('should update guest categories', () => {
     const guest = store.addGuest({
+      eventId: TEST_EVENT_ID,
       firstName: 'John',
       lastName: 'Doe',
       familyId: null,
@@ -65,18 +74,21 @@ describe('Guest Store Sorting', () => {
 
   test('should group guests by family', () => {
     const guest1 = store.addGuest({
+      eventId: TEST_EVENT_ID,
       firstName: 'John',
       lastName: 'Doe',
       familyId: null,
       tags: [],
     });
     const guest2 = store.addGuest({
+      eventId: TEST_EVENT_ID,
       firstName: 'Jane',
       lastName: 'Doe',
       familyId: null,
       tags: [],
     });
     const family = store.addFamily({
+      eventId: TEST_EVENT_ID,
       name: 'Doe Family',
       members: [guest1.id, guest2.id],
     });
@@ -84,7 +96,7 @@ describe('Guest Store Sorting', () => {
     store.updateGuest(guest1.id, { familyId: family.id });
     store.updateGuest(guest2.id, { familyId: family.id });
 
-    const guests = store.getAllGuests();
+    const guests = store.getGuestsForEvent(TEST_EVENT_ID);
     const familyMembers = guests.filter((g) => g.familyId === family.id);
 
     expect(familyMembers).toHaveLength(2);
@@ -94,25 +106,28 @@ describe('Guest Store Sorting', () => {
 
   test('should handle individual guests separately from families', () => {
     const individualGuest = store.addGuest({
+      eventId: TEST_EVENT_ID,
       firstName: 'Alice',
       lastName: 'Smith',
       familyId: null,
       tags: [],
     });
     const familyGuest = store.addGuest({
+      eventId: TEST_EVENT_ID,
       firstName: 'John',
       lastName: 'Doe',
       familyId: null,
       tags: [],
     });
     const family = store.addFamily({
+      eventId: TEST_EVENT_ID,
       name: 'Doe Family',
       members: [familyGuest.id],
     });
 
     store.updateGuest(familyGuest.id, { familyId: family.id });
 
-    const guests = store.getAllGuests();
+    const guests = store.getGuestsForEvent(TEST_EVENT_ID);
     const individualGuests = guests.filter((g) => !g.familyId);
     const familyGuests = guests.filter((g) => g.familyId === family.id);
 
