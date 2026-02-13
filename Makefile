@@ -108,6 +108,7 @@ endif
 		fi && \
 		echo "==> Pulling latest code..." && \
 		cd $(DEPLOY_REPO) && \
+		git stash --quiet 2>/dev/null; \
 		git pull && \
 		echo "==> Rebuilding and restarting containers..." && \
 		docker compose up -d --build && \
