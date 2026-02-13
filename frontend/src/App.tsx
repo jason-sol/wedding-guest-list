@@ -51,7 +51,9 @@ import CheckIcon from '@mui/icons-material/Check';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import { Guest, Family, CategoryInfo, RSVPStatus } from './types';
+import PersonIcon from '@mui/icons-material/Person';
+import ChildCareIcon from '@mui/icons-material/ChildCare';
+import { Guest, Family, CategoryInfo, RSVPStatus, AgeGroup } from './types';
 import { fetchGuests, fetchFamilies, fetchCategories, fetchGuestPresence, importData, createEvent, GuestPresenceMap } from './api';
 import { useFilteredGuests } from './hooks/useFilteredGuests';
 import { useToast } from './components/Toast';
@@ -82,6 +84,7 @@ function App() {
   const [guestPresence, setGuestPresence] = useState<GuestPresenceMap>({});
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedRsvpStatuses, setSelectedRsvpStatuses] = useState<RSVPStatus[]>([]);
+  const [selectedAgeGroups, setSelectedAgeGroups] = useState<AgeGroup[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [showGuestForm, setShowGuestForm] = useState(false);
   const [showFamilyForm, setShowFamilyForm] = useState(false);
@@ -117,6 +120,24 @@ function App() {
     }
   }, [guests, families, loading]);
 
+  // Targeted refresh: only guests + families (used for normal edits)
+  const refreshGuests = useCallback(async () => {
+    if (!currentEvent) return;
+    scrollPositionRef.current = window.scrollY;
+    shouldRestoreScrollRef.current = true;
+    try {
+      const [guestsData, familiesData] = await Promise.all([
+        fetchGuests(currentEvent.id),
+        fetchFamilies(currentEvent.id),
+      ]);
+      setGuests(Array.isArray(guestsData) ? guestsData : []);
+      setFamilies(Array.isArray(familiesData) ? familiesData : []);
+    } catch (err) {
+      console.error('Failed to refresh guests:', err);
+    }
+  }, [currentEvent]);
+
+  // Full load: all data (used for initial load, event switch, major operations)
   const loadData = useCallback(async (preserveScroll = false) => {
     if (!currentEvent) {
       setGuests([]);
@@ -168,15 +189,18 @@ function App() {
     }
   }, [isAuthenticated]);
 
+  // Stable callback for normal edits (RSVP changes, guest edits, family edits)
+  const handleUpdate = useCallback(() => refreshGuests(), [refreshGuests]);
+
   const handleGuestAdded = () => {
     setShowGuestForm(false);
-    loadData(true);
+    refreshGuests();
     showSuccess('Guest added successfully');
   };
 
   const handleFamilyAdded = () => {
     setShowFamilyForm(false);
-    loadData(true);
+    refreshGuests();
     showSuccess('Family added successfully');
   };
 
@@ -256,6 +280,8 @@ function App() {
     selectedCategories,
     searchTerm,
     selectedRsvpStatuses,
+    families,
+    selectedAgeGroups,
   });
 
   if (isAuthenticated === false) {
@@ -387,16 +413,25 @@ function App() {
                         <BlockIcon fontSize="small" sx={{ color: 'error.main' }} />
                       )}
                       {user?.isOwner && currentEvent?.id === event.id && (
-                        <IconButton
-                          size="small"
+                        <Box
+                          component="span"
+                          role="button"
+                          tabIndex={-1}
                           onClick={(e) => {
                             e.stopPropagation();
                             setEditingEvent(event.id);
                           }}
-                          sx={{ ml: 0.5, p: 0.25 }}
+                          sx={{
+                            ml: 0.5,
+                            p: 0.25,
+                            borderRadius: '50%',
+                            display: 'inline-flex',
+                            cursor: 'pointer',
+                            '&:hover': { bgcolor: 'action.hover' },
+                          }}
                         >
                           <SettingsIcon fontSize="small" />
-                        </IconButton>
+                        </Box>
                       )}
                     </Box>
                   }
@@ -418,11 +453,11 @@ function App() {
       </Box>
 
       {/* Main Content */}
-      <Container maxWidth="lg" sx={{ py: 3 }}>
-        {/* Controls */}
-        <Paper sx={{ p: 2, mb: 3 }}>
+      <Container maxWidth="lg" sx={{ py: { xs: 1, sm: 3 } }}>
+        {/* Controls - Actions + Filters (scrolls with page) */}
+        <Paper sx={{ p: 2, mb: 1 }}>
           {/* Top row - Actions */}
-          <Stack direction="row" spacing={2} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
             {canEdit && (
               <>
                 <Button
@@ -525,7 +560,6 @@ function App() {
                 categories.map((cat) => {
                   const isSelected = selectedCategories.includes(cat.name);
                   const textColor = shouldUseWhiteText(cat.color) ? '#FFFFFF' : '#1E293B';
-                  // Adjust color for better contrast when outlined (unselected)
                   const outlinedColor = getContrastAdjustedColor(cat.color, mode);
                   return (
                     <Chip
@@ -605,14 +639,64 @@ function App() {
             </Stack>
           </Box>
 
-          {/* Search and stats */}
+          {/* Age Group filter */}
+          <Box>
+            <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1 }}>
+              Filter by Age Group
+            </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center" sx={{ minHeight: 32 }}>
+              {(['adult', 'child'] as AgeGroup[]).map((ageGroup) => {
+                const isSelected = selectedAgeGroups.includes(ageGroup);
+                const config = {
+                  adult: { label: 'Adults', icon: <PersonIcon sx={{ fontSize: '1rem' }} /> },
+                  child: { label: 'Children', icon: <ChildCareIcon sx={{ fontSize: '1rem' }} /> },
+                }[ageGroup];
+
+                return (
+                  <Chip
+                    key={ageGroup}
+                    label={config.label}
+                    icon={isSelected ? <CheckIcon sx={{ fontSize: '1rem' }} /> : config.icon}
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelectedAgeGroups(selectedAgeGroups.filter(a => a !== ageGroup));
+                      } else {
+                        setSelectedAgeGroups([...selectedAgeGroups, ageGroup]);
+                      }
+                    }}
+                    variant={isSelected ? 'filled' : 'outlined'}
+                    color={isSelected ? 'primary' : 'default'}
+                  />
+                );
+              })}
+              <Button
+                size="small"
+                onClick={() => setSelectedAgeGroups([])}
+                sx={{ visibility: selectedAgeGroups.length > 0 ? 'visible' : 'hidden' }}
+              >
+                Clear
+              </Button>
+            </Stack>
+          </Box>
+        </Paper>
+
+        {/* Sticky Search Bar + Stats */}
+        <Paper
+          sx={{
+            p: 2,
+            mb: 3,
+            position: 'sticky',
+            top: 0,
+            zIndex: (theme) => theme.zIndex.appBar - 1,
+          }}
+        >
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
             <TextField
               size="small"
               placeholder="Search guests and families..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              sx={{ minWidth: 300, flex: 1, maxWidth: 400 }}
+              sx={{ minWidth: { xs: '100%', sm: 300 }, flex: 1, maxWidth: { sm: 400 } }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -628,11 +712,26 @@ function App() {
                 ),
               }}
             />
-            <Chip
-              label={`Total: ${filteredGuests.length} guests`}
-              variant="outlined"
-              color="primary"
-            />
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
+              <Chip
+                label={`Total: ${filteredGuests.length}`}
+                variant="outlined"
+                color="primary"
+                size="small"
+              />
+              <Chip
+                icon={<PersonIcon sx={{ fontSize: '1rem' }} />}
+                label={`${filteredGuests.filter(g => (g.ageGroup || 'adult') === 'adult').length}`}
+                variant="outlined"
+                size="small"
+              />
+              <Chip
+                icon={<ChildCareIcon sx={{ fontSize: '1rem' }} />}
+                label={`${filteredGuests.filter(g => g.ageGroup === 'child').length}`}
+                variant="outlined"
+                size="small"
+              />
+            </Stack>
           </Box>
         </Paper>
 
@@ -648,8 +747,9 @@ function App() {
             categories={categories}
             selectedCategories={selectedCategories}
             selectedRsvpStatuses={selectedRsvpStatuses}
+            selectedAgeGroups={selectedAgeGroups}
             searchTerm={searchTerm}
-            onUpdate={() => loadData(true)}
+            onUpdate={handleUpdate}
             eventId={currentEvent.id}
             readOnly={!canEdit}
             events={events}
@@ -708,6 +808,7 @@ function App() {
           eventId={currentEvent.id}
           events={events}
           currentEventName={currentEvent.name}
+          families={families}
         />
       )}
 
@@ -729,7 +830,7 @@ function App() {
           onSuccess={() => {
             fetchCategories().then(setCategories);
             // Also reload guests since renaming a category updates guest tags
-            loadData(true);
+            refreshGuests();
           }}
           readOnly={!canEdit}
         />

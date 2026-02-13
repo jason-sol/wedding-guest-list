@@ -3,7 +3,7 @@
  * Main container for displaying guests and families with selection and bulk actions
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -24,7 +24,7 @@ import RsvpIcon from '@mui/icons-material/Rsvp';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import { Guest, Family, CategoryInfo, Event, PermissionLevel, RSVPStatus } from '../types';
+import { Guest, Family, CategoryInfo, Event, PermissionLevel, RSVPStatus, AgeGroup } from '../types';
 import { useFilteredGuests } from '../hooks/useFilteredGuests';
 import { GuestPresenceMap } from '../api';
 import GuestItem from './GuestItem';
@@ -43,6 +43,7 @@ interface GuestListProps {
   categories: CategoryInfo[];
   selectedCategories: string[];
   selectedRsvpStatuses?: RSVPStatus[];
+  selectedAgeGroups?: AgeGroup[];
   searchTerm: string;
   onUpdate: () => void;
   eventId: string;
@@ -57,6 +58,7 @@ export default function GuestList({
   categories,
   selectedCategories,
   selectedRsvpStatuses = [],
+  selectedAgeGroups = [],
   searchTerm,
   onUpdate,
   eventId,
@@ -69,6 +71,19 @@ export default function GuestList({
   const [showBulkEventsModal, setShowBulkEventsModal] = useState(false);
   const [showBulkCategoriesModal, setShowBulkCategoriesModal] = useState(false);
   const [showBulkRsvpModal, setShowBulkRsvpModal] = useState(false);
+
+  // Track collapsed families using a ref so state persists across data re-fetches
+  const collapsedFamiliesRef = useRef<Set<string>>(new Set());
+  const [, forceUpdate] = useState(0);
+
+  const handleToggleExpanded = useCallback((familyId: string, expanded: boolean) => {
+    if (expanded) {
+      collapsedFamiliesRef.current.delete(familyId);
+    } else {
+      collapsedFamiliesRef.current.add(familyId);
+    }
+    forceUpdate(n => n + 1);
+  }, []);
 
   const handleSelectionChange = useCallback((guestId: string, selected: boolean) => {
     setSelectedGuestIds(prev => {
@@ -133,85 +148,69 @@ export default function GuestList({
     guests: safeGuests,
     selectedCategories,
     selectedRsvpStatuses,
+    selectedAgeGroups,
     searchTerm,
+    families: safeFamilies,
   });
 
-  const filteredFamilies = useMemo(() => {
-    if (!searchTerm.trim()) return safeFamilies;
-
-    const searchLower = searchTerm.toLowerCase().trim();
-    return safeFamilies.filter(family => {
-      if (family.name.toLowerCase().includes(searchLower)) {
-        return true;
+  // Memoize the expensive list computations
+  const { unifiedList } = useMemo(() => {
+    const lastNameMap = new Map<string, string>();
+    filteredGuests.forEach(guest => {
+      if (guest.familyId && !lastNameMap.has(guest.familyId)) {
+        lastNameMap.set(guest.familyId, guest.lastName);
       }
-      return family.members.some(memberId => {
-        const member = safeGuests.find(g => g.id === memberId);
-        if (!member) return false;
-        const fullName = `${member.firstName} ${member.lastName}`.toLowerCase();
-        return fullName.includes(searchLower);
-      });
     });
-  }, [safeFamilies, safeGuests, searchTerm]);
 
-  const familyLastNameMap = new Map<string, string>();
-  filteredGuests.forEach(guest => {
-    if (guest.familyId && !familyLastNameMap.has(guest.familyId)) {
-      familyLastNameMap.set(guest.familyId, guest.lastName);
-    }
-  });
+    const sortedFamilies = safeFamilies
+      .filter(f => filteredGuests.some(g => g.familyId === f.id))
+      .sort((a, b) => {
+        const aLastName = lastNameMap.get(a.id) || '';
+        const bLastName = lastNameMap.get(b.id) || '';
+        return aLastName.localeCompare(bLastName);
+      });
 
-  const sortedFamilies = filteredFamilies
-    .filter(f => {
-      return filteredGuests.some(g => g.familyId === f.id);
-    })
-    .sort((a, b) => {
-      const aLastName = familyLastNameMap.get(a.id) || '';
-      const bLastName = familyLastNameMap.get(b.id) || '';
+    const individualGuests = filteredGuests.filter((g) => !g.familyId);
+
+    const list: Array<{ type: 'family'; family: Family } | { type: 'individual'; guest: Guest }> = [];
+
+    sortedFamilies.forEach(family => {
+      list.push({ type: 'family', family });
+    });
+
+    individualGuests.forEach(guest => {
+      list.push({ type: 'individual', guest });
+    });
+
+    list.sort((a, b) => {
+      const aLastName = a.type === 'family' ? (lastNameMap.get(a.family.id) || '') : a.guest.lastName;
+      const bLastName = b.type === 'family' ? (lastNameMap.get(b.family.id) || '') : b.guest.lastName;
       return aLastName.localeCompare(bLastName);
     });
 
-  const individualGuests = filteredGuests.filter((g) => !g.familyId);
-
-  const unifiedList: Array<{ type: 'family'; family: Family } | { type: 'individual'; guest: Guest }> = [];
-
-  sortedFamilies.forEach(family => {
-    unifiedList.push({ type: 'family', family });
-  });
-
-  individualGuests.forEach(guest => {
-    unifiedList.push({ type: 'individual', guest });
-  });
-
-  unifiedList.sort((a, b) => {
-    let aLastName: string;
-    let bLastName: string;
-
-    if (a.type === 'family') {
-      aLastName = familyLastNameMap.get(a.family.id) || '';
-    } else {
-      aLastName = a.guest.lastName;
-    }
-
-    if (b.type === 'family') {
-      bLastName = familyLastNameMap.get(b.family.id) || '';
-    } else {
-      bLastName = b.guest.lastName;
-    }
-
-    return aLastName.localeCompare(bLastName);
-  });
+    return { unifiedList: list, familyLastNameMap: lastNameMap };
+  }, [filteredGuests, safeFamilies]);
 
   const totalGuests = filteredGuests.length;
   const selectedGuests = filteredGuests.filter(g => selectedGuestIds.has(g.id));
   const allSelected = filteredGuests.length > 0 && filteredGuests.every(g => selectedGuestIds.has(g.id));
   const someSelected = selectedGuestIds.size > 0;
 
-  // Calculate RSVP counts
-  const rsvpCounts = useMemo(() => {
-    const accepted = filteredGuests.filter(g => g.rsvp === 'accepted').length;
-    const declined = filteredGuests.filter(g => g.rsvp === 'declined').length;
-    const pending = filteredGuests.filter(g => !g.rsvp || g.rsvp === 'pending').length;
-    return { accepted, declined, pending };
+  // Calculate RSVP and age group counts (memoized)
+  const { rsvpCounts, adultCount, childCount } = useMemo(() => {
+    let accepted = 0, declined = 0, pending = 0, adults = 0, children = 0;
+    for (const g of filteredGuests) {
+      if (g.rsvp === 'accepted') accepted++;
+      else if (g.rsvp === 'declined') declined++;
+      else pending++;
+      if (g.ageGroup === 'child') children++;
+      else adults++;
+    }
+    return {
+      rsvpCounts: { accepted, declined, pending },
+      adultCount: adults,
+      childCount: children,
+    };
   }, [filteredGuests]);
 
   return (
@@ -257,12 +256,12 @@ export default function GuestList({
             p: 2,
             mb: 2,
             display: 'flex',
-            alignItems: 'center',
+            flexDirection: { xs: 'column', sm: 'row' },
+            alignItems: { xs: 'stretch', sm: 'center' },
             justifyContent: 'space-between',
             bgcolor: 'primary.main',
             color: 'primary.contrastText',
             borderRadius: 2,
-            flexWrap: 'wrap',
             gap: 2,
           }}
         >
@@ -273,7 +272,7 @@ export default function GuestList({
               sx={{ bgcolor: 'rgba(255,255,255,0.9)', color: '#1E293B', fontWeight: 600 }}
             />
           </Stack>
-          <Stack direction="row" spacing={1}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
             <Button
               variant="contained"
               color="secondary"
@@ -366,6 +365,8 @@ export default function GuestList({
                     selectedGuestIds={selectedGuestIds}
                     onSelectionChange={handleSelectionChange}
                     onFamilySelectionChange={handleFamilySelectionChange}
+                    isExpanded={!collapsedFamiliesRef.current.has(item.family.id)}
+                    onToggleExpanded={handleToggleExpanded}
                   />
                 );
               } else {
@@ -395,11 +396,19 @@ export default function GuestList({
               p: 2,
               display: 'flex',
               justifyContent: 'center',
+              gap: { xs: 1, sm: 3 },
+              flexWrap: 'wrap',
               bgcolor: 'action.hover',
             }}
           >
             <Typography variant="body1">
-              Total Guests: <strong>{totalGuests}</strong>
+              Total: <strong>{totalGuests}</strong>
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Adults: <strong>{adultCount}</strong>
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Children: <strong>{childCount}</strong>
             </Typography>
           </Paper>
         </>

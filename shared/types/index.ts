@@ -10,6 +10,9 @@ export interface CategoryInfo {
 // RSVP status
 export type RSVPStatus = "pending" | "accepted" | "declined";
 
+// Age group
+export type AgeGroup = "adult" | "child";
+
 // Permission levels for events
 export type PermissionLevel = "admin" | "viewer" | "none";
 
@@ -51,6 +54,7 @@ export interface Guest {
   tags: Category[];
   rsvp?: RSVPStatus;
   dietaryRequirements?: string; // Dietary restrictions, allergies, etc.
+  ageGroup?: AgeGroup;
 }
 
 // Family data structure (now has eventId)
@@ -59,6 +63,7 @@ export interface Family {
   eventId: string; // Which event this family belongs to
   name: string;
   members: string[]; // Array of guest IDs within this event
+  groupId?: string; // Links same family across events
 }
 
 // Auth user info returned from login/check

@@ -1,22 +1,26 @@
 import { useMemo } from 'react';
-import { Guest, RSVPStatus } from '../types';
+import { Guest, Family, RSVPStatus, AgeGroup } from '../types';
 
 interface FilterOptions {
   guests: Guest[];
   selectedCategories: string[];
   searchTerm: string;
   selectedRsvpStatuses?: RSVPStatus[];
+  families?: Family[];
+  selectedAgeGroups?: AgeGroup[];
 }
 
 /**
- * Filters guests by categories, RSVP status, and search term.
- * Extracted to avoid duplicate logic between components.
+ * Filters guests by categories, RSVP status, age group, and search term.
+ * Search also matches family names, including all members of matching families.
  */
 export function filterGuests({
   guests,
   selectedCategories,
   searchTerm,
   selectedRsvpStatuses = [],
+  families = [],
+  selectedAgeGroups = [],
 }: FilterOptions): Guest[] {
   let filtered = guests;
 
@@ -36,12 +40,32 @@ export function filterGuests({
     });
   }
 
-  // Filter by search term
+  // Filter by age group
+  if (selectedAgeGroups.length > 0) {
+    filtered = filtered.filter(guest => {
+      const guestAgeGroup = guest.ageGroup || 'adult';
+      return selectedAgeGroups.includes(guestAgeGroup);
+    });
+  }
+
+  // Filter by search term (also matches family names)
   if (searchTerm.trim()) {
     const searchLower = searchTerm.toLowerCase().trim();
+
+    // Build set of family IDs whose name matches the search
+    const matchingFamilyIds = new Set<string>();
+    for (const family of families) {
+      if (family.name.toLowerCase().includes(searchLower)) {
+        matchingFamilyIds.add(family.id);
+      }
+    }
+
     filtered = filtered.filter(guest => {
       const fullName = `${guest.firstName} ${guest.lastName}`.toLowerCase();
-      return fullName.includes(searchLower);
+      if (fullName.includes(searchLower)) return true;
+      // Include if guest belongs to a family whose name matches
+      if (guest.familyId && matchingFamilyIds.has(guest.familyId)) return true;
+      return false;
     });
   }
 
@@ -53,10 +77,17 @@ export function filterGuests({
  * Memoizes the result to avoid recalculation on every render.
  */
 export function useFilteredGuests(options: FilterOptions): Guest[] {
-  const { guests, selectedCategories, searchTerm, selectedRsvpStatuses = [] } = options;
+  const {
+    guests,
+    selectedCategories,
+    searchTerm,
+    selectedRsvpStatuses = [],
+    families = [],
+    selectedAgeGroups = [],
+  } = options;
 
   return useMemo(
-    () => filterGuests({ guests, selectedCategories, searchTerm, selectedRsvpStatuses }),
-    [guests, selectedCategories, searchTerm, selectedRsvpStatuses]
+    () => filterGuests({ guests, selectedCategories, searchTerm, selectedRsvpStatuses, families, selectedAgeGroups }),
+    [guests, selectedCategories, searchTerm, selectedRsvpStatuses, families, selectedAgeGroups]
   );
 }

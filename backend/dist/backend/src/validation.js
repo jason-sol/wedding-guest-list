@@ -4,7 +4,7 @@
  * Provides type-safe validation for all API inputs and data imports.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LoginSchema = exports.BACKUP_FILENAME_REGEX = exports.RestoreBackupSchema = exports.UpdateBackupSettingsSchema = exports.ImportDataSchema = exports.PermissionSchema = exports.SetPermissionSchema = exports.UserSchema = exports.UpdateUserSchema = exports.CreateUserSchema = exports.EventSchema = exports.ReorderEventsSchema = exports.UpdateEventSchema = exports.CreateEventSchema = exports.CategoryInfoSchema = exports.CreateCategorySchema = exports.FamilySchema = exports.ReconstructFamiliesSchema = exports.CopyFamilySchema = exports.AddGuestToFamilySchema = exports.ReorderMembersSchema = exports.UpdateFamilySchema = exports.CreateFamilySchema = exports.FamilyMemberInputSchema = exports.JoyImportSchema = exports.BulkRsvpUpdateSchema = exports.CopyGuestSchema = exports.GuestSchema = exports.UpdateGuestSchema = exports.CreateGuestSchema = exports.PermissionLevelSchema = exports.RSVPStatusSchema = void 0;
+exports.LoginSchema = exports.BACKUP_FILENAME_REGEX = exports.RestoreBackupSchema = exports.UpdateBackupSettingsSchema = exports.ImportDataSchema = exports.PermissionSchema = exports.SetPermissionSchema = exports.UserSchema = exports.UpdateUserSchema = exports.CreateUserSchema = exports.EventSchema = exports.ReorderEventsSchema = exports.UpdateEventSchema = exports.CreateEventSchema = exports.CategoryInfoSchema = exports.CreateCategorySchema = exports.FamilySchema = exports.ReconstructFamiliesSchema = exports.CopyFamilySchema = exports.AddGuestToFamilySchema = exports.ReorderMembersSchema = exports.UpdateFamilySchema = exports.CreateFamilySchema = exports.FamilyMemberInputSchema = exports.JoyImportSchema = exports.BulkRsvpUpdateSchema = exports.CopyGuestSchema = exports.GuestSchema = exports.UpdateGuestSchema = exports.CreateGuestSchema = exports.PermissionLevelSchema = exports.AgeGroupSchema = exports.RSVPStatusSchema = void 0;
 exports.validate = validate;
 const zod_1 = require("zod");
 const config_1 = require("./config");
@@ -25,6 +25,10 @@ const sanitizedString = (maxLength) => zod_1.z.string()
  * RSVP status enum.
  */
 exports.RSVPStatusSchema = zod_1.z.enum(['pending', 'accepted', 'declined']);
+/**
+ * Age group enum.
+ */
+exports.AgeGroupSchema = zod_1.z.enum(['adult', 'child']);
 /**
  * Permission level enum.
  */
@@ -57,6 +61,7 @@ exports.CreateGuestSchema = zod_1.z.object({
         .max(500, 'Dietary requirements cannot exceed 500 characters')
         .transform(s => s.replace(/[<>]/g, ''))
         .optional(),
+    ageGroup: exports.AgeGroupSchema.optional(),
 });
 /**
  * Schema for updating a guest (all fields optional).
@@ -81,6 +86,7 @@ exports.UpdateGuestSchema = zod_1.z.object({
         .max(500, 'Dietary requirements cannot exceed 500 characters')
         .transform(s => s.replace(/[<>]/g, ''))
         .optional(),
+    ageGroup: exports.AgeGroupSchema.optional(),
 });
 /**
  * Full guest schema (for import validation).
@@ -95,6 +101,7 @@ exports.GuestSchema = zod_1.z.object({
     tags: zod_1.z.array(zod_1.z.string()),
     rsvp: exports.RSVPStatusSchema.optional(),
     dietaryRequirements: zod_1.z.string().trim().max(500).optional(),
+    ageGroup: exports.AgeGroupSchema.optional(),
 });
 /**
  * Schema for copying a guest to another event.
@@ -188,6 +195,7 @@ exports.FamilySchema = zod_1.z.object({
     eventId: zod_1.z.string().regex(/^event-\d+$/, 'Invalid event ID format'),
     name: zod_1.z.string().trim().min(1).max(100),
     members: zod_1.z.array(zod_1.z.string()),
+    groupId: zod_1.z.string().optional(),
 });
 // ============================================================
 // Category schemas

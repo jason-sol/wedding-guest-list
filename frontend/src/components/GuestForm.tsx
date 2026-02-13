@@ -19,11 +19,16 @@ import {
   Checkbox,
   Divider,
   CircularProgress,
+  ToggleButtonGroup,
+  ToggleButton,
+  Autocomplete,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
-import { Category, CategoryInfo, Event, PermissionLevel } from '../types';
-import { addGuest, copyGuest } from '../api';
+import PersonIcon from '@mui/icons-material/Person';
+import ChildCareIcon from '@mui/icons-material/ChildCare';
+import { Category, CategoryInfo, Event, PermissionLevel, AgeGroup, Family } from '../types';
+import { addGuest, copyGuest, addGuestToFamily } from '../api';
 import CategoryDropdown from './CategoryDropdown';
 
 interface EventWithPermission extends Event {
@@ -37,6 +42,7 @@ interface GuestFormProps {
   eventId: string;
   events?: EventWithPermission[];
   currentEventName?: string;
+  families?: Family[];
 }
 
 export default function GuestForm({
@@ -45,10 +51,13 @@ export default function GuestForm({
   categories,
   eventId,
   events = [],
+  families = [],
 }: GuestFormProps) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [selectedTags, setSelectedTags] = useState<Category[]>([]);
+  const [ageGroup, setAgeGroup] = useState<AgeGroup>('adult');
+  const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -74,7 +83,16 @@ export default function GuestForm({
         lastName: lastName.trim(),
         familyId: null,
         tags: selectedTags,
+        ageGroup,
       });
+
+      if (selectedFamilyId) {
+        try {
+          await addGuestToFamily(eventId, selectedFamilyId, newGuest.id);
+        } catch (err) {
+          console.error('Failed to assign guest to family:', err);
+        }
+      }
 
       for (const targetEventId of selectedEvents) {
         try {
@@ -140,6 +158,47 @@ export default function GuestForm({
               slotProps={{ htmlInput: { maxLength: 100 } }}
             />
           </Box>
+
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1 }}>
+              Age Group
+            </Typography>
+            <ToggleButtonGroup
+              value={ageGroup}
+              exclusive
+              onChange={(_, val) => val && setAgeGroup(val)}
+              size="small"
+            >
+              <ToggleButton value="adult">
+                <PersonIcon sx={{ mr: 0.5, fontSize: '1.1rem' }} />
+                Adult
+              </ToggleButton>
+              <ToggleButton value="child">
+                <ChildCareIcon sx={{ mr: 0.5, fontSize: '1.1rem' }} />
+                Child
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
+
+          {families.length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <Autocomplete
+                options={[...families].sort((a, b) => a.name.localeCompare(b.name))}
+                getOptionLabel={(option) => option.name}
+                value={families.find(f => f.id === selectedFamilyId) || null}
+                onChange={(_, newValue) => setSelectedFamilyId(newValue?.id || null)}
+                disabled={isSubmitting}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Assign to Family"
+                    placeholder="None (individual guest)"
+                    size="small"
+                  />
+                )}
+              />
+            </Box>
+          )}
 
           <CategoryDropdown
             categories={categories}

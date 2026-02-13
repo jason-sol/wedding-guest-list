@@ -31,8 +31,9 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { Family, Guest, Category, CategoryInfo, Event, PermissionLevel } from '../types';
-import { updateFamily, reorderFamilyMembers, addGuestToFamily, removeGuestFromFamily, updateGuest, deleteFamily, deleteGuest, copyFamily, GuestPresenceMap } from '../api';
+import { updateFamily, reorderFamilyMembers, addGuestToFamily, removeGuestFromFamily, updateGuest, deleteFamily, deleteGuest, copyFamily, GuestPresenceMap, fetchFamilies } from '../api';
 import CategoryDropdown from './CategoryDropdown';
+import CrossEventSyncDialog from './CrossEventSyncDialog';
 
 interface EventWithPermission extends Event {
   permission: PermissionLevel;
@@ -68,6 +69,13 @@ export default function EditFamilyForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteMembers, setDeleteMembers] = useState(false);
+  const [deleteAcrossEvents, setDeleteAcrossEvents] = useState(false);
+  const [removedMemberSyncInfo, setRemovedMemberSyncInfo] = useState<{
+    memberNames: Array<{ firstName: string; lastName: string }>;
+    otherEvents: Array<{ id: string; name: string }>;
+  } | null>(null);
+  const [familyNameSyncInfo, setFamilyNameSyncInfo] = useState<{ newName: string } | null>(null);
+  const [pendingRemovedMembers, setPendingRemovedMembers] = useState<string[]>([]);
 
   const otherAdminEvents = useMemo(() =>
     events.filter(e => e.id !== eventId && e.permission === 'admin'),
@@ -230,6 +238,32 @@ export default function EditFamilyForm({
         }
       }
 
+      // Save removed members for potential follow-up dialog
+      setPendingRemovedMembers(removedMembers);
+
+      // Check if family name changed and family exists in other events
+      const nameChanged = familyName.trim().toLowerCase() !== family.name.toLowerCase();
+      if (nameChanged && family.groupId && otherEventsWithFamily.length > 0) {
+        setFamilyNameSyncInfo({ newName: familyName.trim() });
+        return; // Don't call onSuccess yet — wait for name sync dialog first
+      }
+
+      // Check if any members were removed and if they exist in other events with the same family
+      if (removedMembers.length > 0 && family.groupId && otherEventsWithFamily.length > 0) {
+        const removedGuestNames = removedMembers
+          .map(id => familyGuests.find(g => g.id === id))
+          .filter((g): g is Guest => g !== undefined)
+          .map(g => ({ firstName: g.firstName, lastName: g.lastName }));
+
+        if (removedGuestNames.length > 0) {
+          setRemovedMemberSyncInfo({
+            memberNames: removedGuestNames,
+            otherEvents: otherEventsWithFamily.map(e => ({ id: e.id, name: e.name })),
+          });
+          return; // Don't call onSuccess yet — wait for dialog
+        }
+      }
+
       onSuccess();
     } catch (error) {
       console.error('Failed to update family:', error);
@@ -271,6 +305,18 @@ export default function EditFamilyForm({
     }
   };
 
+  // Compute other events that have this family (via groupId)
+  const otherEventsWithFamily = useMemo(() => {
+    if (!family.groupId) return [];
+    return otherAdminEvents.filter(e => {
+      // Check if any family member exists in this event
+      return familyGuests.some(guest => {
+        const presence = guestPresenceMap[guest.id] || [];
+        return presence.some(p => p.id === e.id);
+      });
+    });
+  }, [family.groupId, otherAdminEvents, familyGuests, guestPresenceMap]);
+
   const handleDeleteFamily = async () => {
     if (!showDeleteConfirm) {
       setShowDeleteConfirm(true);
@@ -279,6 +325,33 @@ export default function EditFamilyForm({
 
     setIsSubmitting(true);
     try {
+      // Delete in other events first if requested
+      if (deleteAcrossEvents && otherEventsWithFamily.length > 0) {
+        for (const otherEvent of otherEventsWithFamily) {
+          try {
+            // Find the matching family in the other event by groupId, then by name
+            const otherFamilies = await fetchFamilies(otherEvent.id);
+            let matchingFamily = otherFamilies.find(f => f.groupId === family.groupId);
+            if (!matchingFamily) {
+              matchingFamily = otherFamilies.find(
+                f => f.name.toLowerCase() === family.name.toLowerCase()
+              );
+            }
+            if (matchingFamily) {
+              if (deleteMembers) {
+                for (const guestId of matchingFamily.members) {
+                  await deleteGuest(otherEvent.id, guestId);
+                }
+              }
+              await deleteFamily(otherEvent.id, matchingFamily.id);
+            }
+          } catch (err) {
+            console.error(`Failed to delete family in event ${otherEvent.name}:`, err);
+          }
+        }
+      }
+
+      // Delete in current event
       if (deleteMembers) {
         for (const guestId of family.members) {
           await deleteGuest(eventId, guestId);
@@ -293,6 +366,91 @@ export default function EditFamilyForm({
       setIsSubmitting(false);
       setShowDeleteConfirm(false);
     }
+  };
+
+  // After name sync completes, check if there are also removed members to sync
+  const checkPendingRemovedMembers = () => {
+    if (pendingRemovedMembers.length > 0 && family.groupId && otherEventsWithFamily.length > 0) {
+      const removedGuestNames = pendingRemovedMembers
+        .map(id => familyGuests.find(g => g.id === id))
+        .filter((g): g is Guest => g !== undefined)
+        .map(g => ({ firstName: g.firstName, lastName: g.lastName }));
+
+      if (removedGuestNames.length > 0) {
+        setRemovedMemberSyncInfo({
+          memberNames: removedGuestNames,
+          otherEvents: otherEventsWithFamily.map(e => ({ id: e.id, name: e.name })),
+        });
+        return; // Show removed member sync dialog next
+      }
+    }
+    onSuccess();
+  };
+
+  const handleFamilyNameSyncApply = async (selectedEventIds: string[]) => {
+    if (!familyNameSyncInfo) return;
+    const errors: string[] = [];
+    for (const otherEventId of selectedEventIds) {
+      try {
+        const otherFamilies = await fetchFamilies(otherEventId);
+        // Try matching by groupId first, then fall back to matching by old name
+        let matchingFamily = otherFamilies.find(f => f.groupId === family.groupId);
+        if (!matchingFamily) {
+          matchingFamily = otherFamilies.find(
+            f => f.name.toLowerCase() === family.name.toLowerCase()
+          );
+        }
+        if (matchingFamily) {
+          await updateFamily(otherEventId, matchingFamily.id, { name: familyNameSyncInfo.newName });
+        } else {
+          const event = events.find(e => e.id === otherEventId);
+          errors.push(event?.name || otherEventId);
+        }
+      } catch (err) {
+        const event = events.find(e => e.id === otherEventId);
+        errors.push(event?.name || otherEventId);
+        console.error(`Failed to sync family name to event ${otherEventId}:`, err);
+      }
+    }
+    if (errors.length > 0) {
+      alert(`Failed to sync family name to: ${errors.join(', ')}`);
+    }
+    setFamilyNameSyncInfo(null);
+    checkPendingRemovedMembers();
+  };
+
+  const handleRemovedMemberSync = async (selectedEventIds: string[]) => {
+    if (!removedMemberSyncInfo) return;
+
+    for (const otherEventId of selectedEventIds) {
+      try {
+        const otherFamilies = await fetchFamilies(otherEventId);
+        let matchingFamily = otherFamilies.find(f => f.groupId === family.groupId);
+        if (!matchingFamily) {
+          matchingFamily = otherFamilies.find(
+            f => f.name.toLowerCase() === family.name.toLowerCase()
+          );
+        }
+        if (!matchingFamily) continue;
+
+        for (const memberName of removedMemberSyncInfo.memberNames) {
+          const removedGuest = familyGuests.find(
+            g => g.firstName === memberName.firstName && g.lastName === memberName.lastName
+          );
+          if (removedGuest) {
+            const presence = guestPresenceMap[removedGuest.id] || [];
+            const presenceInfo = presence.find(p => p.id === otherEventId);
+            if (presenceInfo) {
+              await removeGuestFromFamily(otherEventId, matchingFamily.id, presenceInfo.guestId);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to sync member removal to event ${otherEventId}:`, err);
+      }
+    }
+    setRemovedMemberSyncInfo(null);
+    onSuccess();
   };
 
   const orderedMembers = orderedMemberIds
@@ -484,6 +642,7 @@ export default function EditFamilyForm({
         onClose={() => {
           setShowDeleteConfirm(false);
           setDeleteMembers(false);
+          setDeleteAcrossEvents(false);
         }}
         maxWidth="xs"
         fullWidth
@@ -514,12 +673,32 @@ export default function EditFamilyForm({
               ? 'All family members will be permanently deleted.'
               : 'Family members will be kept but removed from the family grouping.'}
           </Typography>
+          {otherEventsWithFamily.length > 0 && (
+            <>
+              <Divider sx={{ my: 2 }} />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={deleteAcrossEvents}
+                    onChange={(e) => setDeleteAcrossEvents(e.target.checked)}
+                  />
+                }
+                label="Also delete in all other events"
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                {deleteAcrossEvents
+                  ? `This family will also be removed from: ${otherEventsWithFamily.map(e => e.name).join(', ')}.`
+                  : 'Only the family in the current event will be removed.'}
+              </Typography>
+            </>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button
             onClick={() => {
               setShowDeleteConfirm(false);
               setDeleteMembers(false);
+              setDeleteAcrossEvents(false);
             }}
             disabled={isSubmitting}
           >
@@ -535,6 +714,32 @@ export default function EditFamilyForm({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {familyNameSyncInfo && (
+        <CrossEventSyncDialog
+          title="Sync Family Name"
+          description={`"${family.name}" was renamed to "${familyNameSyncInfo.newName}". Also update in these events?`}
+          events={otherEventsWithFamily.map(e => ({ id: e.id, name: e.name }))}
+          onApply={handleFamilyNameSyncApply}
+          onSkip={() => {
+            setFamilyNameSyncInfo(null);
+            checkPendingRemovedMembers();
+          }}
+        />
+      )}
+
+      {removedMemberSyncInfo && (
+        <CrossEventSyncDialog
+          title="Sync Member Removal"
+          description={`Members were removed from ${family.name}. Also remove from family in other events?`}
+          events={removedMemberSyncInfo.otherEvents}
+          onApply={handleRemovedMemberSync}
+          onSkip={() => {
+            setRemovedMemberSyncInfo(null);
+            onSuccess();
+          }}
+        />
+      )}
     </>
   );
 }

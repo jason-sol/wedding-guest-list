@@ -66,6 +66,10 @@ class DataStore {
         this.guests = new Map();
         this.families = new Map();
         this.categories = new Map();
+        // Secondary indexes for fast event-scoped and name-based lookups
+        this.guestsByEvent = new Map(); // eventId → guestIds
+        this.familiesByEvent = new Map(); // eventId → familyIds
+        this.guestsByName = new Map(); // "firstname|lastname" → guestIds
         // Multi-user data
         this.users = new Map();
         this.events = new Map();
@@ -99,6 +103,73 @@ class DataStore {
             return;
         if (this.initPromise) {
             await this.initPromise;
+        }
+    }
+    // ============================================================
+    // Index maintenance helpers
+    // ============================================================
+    static nameKey(firstName, lastName) {
+        return `${firstName.toLowerCase()}|${lastName.toLowerCase()}`;
+    }
+    addGuestToIndexes(guest) {
+        // Event index
+        let eventSet = this.guestsByEvent.get(guest.eventId);
+        if (!eventSet) {
+            eventSet = new Set();
+            this.guestsByEvent.set(guest.eventId, eventSet);
+        }
+        eventSet.add(guest.id);
+        // Name index
+        const nk = DataStore.nameKey(guest.firstName, guest.lastName);
+        let nameSet = this.guestsByName.get(nk);
+        if (!nameSet) {
+            nameSet = new Set();
+            this.guestsByName.set(nk, nameSet);
+        }
+        nameSet.add(guest.id);
+    }
+    removeGuestFromIndexes(guest) {
+        // Event index
+        const eventSet = this.guestsByEvent.get(guest.eventId);
+        if (eventSet) {
+            eventSet.delete(guest.id);
+            if (eventSet.size === 0)
+                this.guestsByEvent.delete(guest.eventId);
+        }
+        // Name index
+        const nk = DataStore.nameKey(guest.firstName, guest.lastName);
+        const nameSet = this.guestsByName.get(nk);
+        if (nameSet) {
+            nameSet.delete(guest.id);
+            if (nameSet.size === 0)
+                this.guestsByName.delete(nk);
+        }
+    }
+    addFamilyToIndex(family) {
+        let eventSet = this.familiesByEvent.get(family.eventId);
+        if (!eventSet) {
+            eventSet = new Set();
+            this.familiesByEvent.set(family.eventId, eventSet);
+        }
+        eventSet.add(family.id);
+    }
+    removeFamilyFromIndex(family) {
+        const eventSet = this.familiesByEvent.get(family.eventId);
+        if (eventSet) {
+            eventSet.delete(family.id);
+            if (eventSet.size === 0)
+                this.familiesByEvent.delete(family.eventId);
+        }
+    }
+    rebuildIndexes() {
+        this.guestsByEvent.clear();
+        this.familiesByEvent.clear();
+        this.guestsByName.clear();
+        for (const guest of this.guests.values()) {
+            this.addGuestToIndexes(guest);
+        }
+        for (const family of this.families.values()) {
+            this.addFamilyToIndex(family);
         }
     }
     initializeDefaultCategories() {
@@ -251,6 +322,10 @@ class DataStore {
             // Load families
             if (parsed.families && Array.isArray(parsed.families)) {
                 parsed.families.forEach((family) => {
+                    // Backfill groupId for existing families that don't have one
+                    if (!family.groupId) {
+                        family.groupId = family.id;
+                    }
                     this.families.set(family.id, family);
                     const idNum = parseInt(family.id.replace('family-', ''));
                     if (idNum >= this.nextFamilyId) {
@@ -296,6 +371,8 @@ class DataStore {
             if (parsed.backupSettings) {
                 this.backupSettings = { ...this.backupSettings, ...parsed.backupSettings };
             }
+            // Build secondary indexes after loading all data
+            this.rebuildIndexes();
             console.log(`Loaded: ${this.guests.size} guests, ${this.families.size} families, ${this.categories.size} categories, ${this.users.size} users, ${this.events.size} events`);
         }
         catch (error) {
@@ -446,18 +523,22 @@ class DataStore {
     deleteEvent(id) {
         const deleted = this.events.delete(id);
         if (deleted) {
-            // Delete all guests in this event
+            // Delete all guests in this event (and update name indexes)
             for (const [guestId, guest] of this.guests.entries()) {
                 if (guest.eventId === id) {
+                    this.removeGuestFromIndexes(guest);
                     this.guests.delete(guestId);
                 }
             }
+            // Clean up event index entirely
+            this.guestsByEvent.delete(id);
             // Delete all families in this event
             for (const [familyId, family] of this.families.entries()) {
                 if (family.eventId === id) {
                     this.families.delete(familyId);
                 }
             }
+            this.familiesByEvent.delete(id);
             // Delete all permissions for this event
             for (const [key, perm] of this.permissions.entries()) {
                 if (perm.eventId === id) {
@@ -528,6 +609,7 @@ class DataStore {
         const id = `guest-${this.nextGuestId++}`;
         const newGuest = { ...guest, id };
         this.guests.set(id, newGuest);
+        this.addGuestToIndexes(newGuest);
         this.scheduleSave();
         return newGuest;
     }
@@ -538,14 +620,33 @@ class DataStore {
         return Array.from(this.guests.values());
     }
     getGuestsForEvent(eventId) {
-        return Array.from(this.guests.values()).filter(g => g.eventId === eventId);
+        const ids = this.guestsByEvent.get(eventId);
+        if (!ids)
+            return [];
+        return Array.from(ids).map(id => this.guests.get(id)).filter(Boolean);
+    }
+    getGuestsByName(firstName, lastName) {
+        const nk = DataStore.nameKey(firstName, lastName);
+        const ids = this.guestsByName.get(nk);
+        if (!ids)
+            return [];
+        return Array.from(ids).map(id => this.guests.get(id)).filter(Boolean);
     }
     updateGuest(id, updates) {
         const guest = this.guests.get(id);
         if (!guest)
             return null;
+        // If name is changing, update name index
+        const nameChanging = (updates.firstName !== undefined && updates.firstName !== guest.firstName) ||
+            (updates.lastName !== undefined && updates.lastName !== guest.lastName);
+        if (nameChanging) {
+            this.removeGuestFromIndexes(guest);
+        }
         const updated = { ...guest, ...updates };
         this.guests.set(id, updated);
+        if (nameChanging) {
+            this.addGuestToIndexes(updated);
+        }
         this.scheduleSave();
         return updated;
     }
@@ -561,6 +662,7 @@ class DataStore {
                 this.families.set(family.id, family);
             }
         }
+        this.removeGuestFromIndexes(guest);
         const deleted = this.guests.delete(id);
         if (deleted) {
             this.scheduleSave();
@@ -593,6 +695,7 @@ class DataStore {
             familyId: null,
             tags: [...sourceGuest.tags],
             rsvp: undefined, // Reset RSVP for new event
+            ageGroup: sourceGuest.ageGroup,
         });
         // If source guest belongs to a family, try to preserve the relationship
         if (sourceGuest.familyId) {
@@ -641,11 +744,12 @@ class DataStore {
         }
         // If no suitable family found, create a new one
         if (!targetFamily && matchingTargetGuests.length >= 1) {
-            // Create a new family in the target event
+            // Create a new family in the target event, preserving groupId
             targetFamily = this.addFamily({
                 eventId: targetEventId,
                 name: sourceFamily.name,
                 members: [],
+                groupId: sourceFamily.groupId,
             });
             // Add existing matching members to the new family (remove from other families if needed)
             for (const member of matchingTargetGuests) {
@@ -656,6 +760,7 @@ class DataStore {
                         oldFamily.members = oldFamily.members.filter(id => id !== member.id);
                         // Clean up empty family
                         if (oldFamily.members.length === 0) {
+                            this.removeFamilyFromIndex(oldFamily);
                             this.families.delete(oldFamily.id);
                         }
                         else {
@@ -769,6 +874,7 @@ class DataStore {
         const targetFamilies = this.getFamiliesForEvent(targetEventId);
         for (const family of targetFamilies) {
             if (family.members.length === 0) {
+                this.removeFamilyFromIndex(family);
                 this.families.delete(family.id);
             }
         }
@@ -780,8 +886,9 @@ class DataStore {
     // ============================================================
     addFamily(family) {
         const id = `family-${this.nextFamilyId++}`;
-        const newFamily = { ...family, id };
+        const newFamily = { ...family, id, groupId: family.groupId || id };
         this.families.set(id, newFamily);
+        this.addFamilyToIndex(newFamily);
         this.scheduleSave();
         return newFamily;
     }
@@ -792,7 +899,10 @@ class DataStore {
         return Array.from(this.families.values());
     }
     getFamiliesForEvent(eventId) {
-        return Array.from(this.families.values()).filter(f => f.eventId === eventId);
+        const ids = this.familiesByEvent.get(eventId);
+        if (!ids)
+            return [];
+        return Array.from(ids).map(id => this.families.get(id)).filter(Boolean);
     }
     updateFamily(id, updates) {
         const family = this.families.get(id);
@@ -815,6 +925,7 @@ class DataStore {
                 this.guests.set(memberId, guest);
             }
         }
+        this.removeFamilyFromIndex(family);
         const deleted = this.families.delete(id);
         if (deleted) {
             this.scheduleSave();
@@ -855,6 +966,7 @@ class DataStore {
                         familyId: null, // Will be set below
                         tags: [...sourceGuest.tags],
                         rsvp: undefined,
+                        ageGroup: sourceGuest.ageGroup,
                     });
                     copiedGuests.push(newGuest);
                     memberIdMap.set(memberId, newGuest.id);
@@ -875,11 +987,12 @@ class DataStore {
             family = existingFamily;
         }
         else {
-            // Create the family with new member IDs
+            // Create the family with new member IDs, preserving groupId
             family = this.addFamily({
                 eventId: targetEventId,
                 name: sourceFamily.name,
                 members: copiedGuests.map(g => g.id),
+                groupId: sourceFamily.groupId,
             });
         }
         // Update guests with family reference
@@ -891,6 +1004,100 @@ class DataStore {
         }
         this.scheduleSave();
         return { family, guests: copiedGuests };
+    }
+    /**
+     * Add a member to all families sharing the same groupId.
+     * Used to sync family membership across events.
+     * Returns the number of families updated.
+     */
+    addMemberAcrossGroup(familyId, guest) {
+        const family = this.families.get(familyId);
+        if (!family || !family.groupId)
+            return 0;
+        const groupId = family.groupId;
+        let updated = 0;
+        for (const [, otherFamily] of this.families) {
+            if (otherFamily.id === familyId)
+                continue;
+            if (otherFamily.groupId !== groupId)
+                continue;
+            // Check if a guest with the same name already exists in this event
+            const eventGuests = this.getGuestsForEvent(otherFamily.eventId);
+            const existingGuest = eventGuests.find(g => g.firstName.toLowerCase() === guest.firstName.toLowerCase() &&
+                g.lastName.toLowerCase() === guest.lastName.toLowerCase());
+            if (existingGuest) {
+                // Already exists — just ensure they're in the family
+                if (!otherFamily.members.includes(existingGuest.id)) {
+                    otherFamily.members.push(existingGuest.id);
+                    existingGuest.familyId = otherFamily.id;
+                    this.guests.set(existingGuest.id, existingGuest);
+                    this.families.set(otherFamily.id, otherFamily);
+                    updated++;
+                }
+            }
+            else {
+                // Create new guest in other event's family
+                const newGuest = this.addGuest({
+                    eventId: otherFamily.eventId,
+                    firstName: guest.firstName,
+                    lastName: guest.lastName,
+                    familyId: otherFamily.id,
+                    tags: [...guest.tags],
+                    rsvp: undefined,
+                    ageGroup: guest.ageGroup,
+                });
+                otherFamily.members.push(newGuest.id);
+                this.families.set(otherFamily.id, otherFamily);
+                updated++;
+            }
+        }
+        if (updated > 0) {
+            this.scheduleSave();
+        }
+        return updated;
+    }
+    /**
+     * Remove a member from all families sharing the same groupId.
+     * Mirrors addMemberAcrossGroup() for cross-event member removal.
+     * Returns the number of families updated.
+     */
+    removeMemberAcrossGroup(familyId, guestFirstName, guestLastName) {
+        const family = this.families.get(familyId);
+        if (!family || !family.groupId)
+            return 0;
+        const groupId = family.groupId;
+        let updated = 0;
+        for (const [, otherFamily] of this.families) {
+            if (otherFamily.id === familyId)
+                continue;
+            if (otherFamily.groupId !== groupId)
+                continue;
+            // Find the member matching by name (case-insensitive)
+            const memberIndex = otherFamily.members.findIndex(memberId => {
+                const member = this.guests.get(memberId);
+                if (!member)
+                    return false;
+                return member.firstName.toLowerCase() === guestFirstName.toLowerCase() &&
+                    member.lastName.toLowerCase() === guestLastName.toLowerCase();
+            });
+            if (memberIndex !== -1) {
+                const memberId = otherFamily.members[memberIndex];
+                const member = this.guests.get(memberId);
+                // Remove from family members array
+                otherFamily.members.splice(memberIndex, 1);
+                this.families.set(otherFamily.id, otherFamily);
+                // Clear guest's familyId
+                if (member) {
+                    member.familyId = null;
+                    this.guests.set(memberId, member);
+                }
+                updated++;
+            }
+        }
+        if (updated > 0) {
+            this.scheduleSave();
+        }
+        return updated;
     }
     // ============================================================
     // Category operations (global - not event-scoped)
@@ -963,6 +1170,9 @@ class DataStore {
         this.users.clear();
         this.events.clear();
         this.permissions.clear();
+        this.guestsByEvent.clear();
+        this.familiesByEvent.clear();
+        this.guestsByName.clear();
         this.nextGuestId = 1;
         this.nextFamilyId = 1;
         this.nextUserId = 1;
@@ -1042,6 +1252,8 @@ class DataStore {
                 this.permissions.set(key, perm);
             });
         }
+        // Rebuild all secondary indexes
+        this.rebuildIndexes();
         this.scheduleSave();
     }
     /**

@@ -29,6 +29,11 @@ const sanitizedString = (maxLength: number) =>
 export const RSVPStatusSchema = z.enum(['pending', 'accepted', 'declined']);
 
 /**
+ * Age group enum.
+ */
+export const AgeGroupSchema = z.enum(['adult', 'child']);
+
+/**
  * Permission level enum.
  */
 export const PermissionLevelSchema = z.enum(['admin', 'viewer', 'none']);
@@ -62,6 +67,7 @@ export const CreateGuestSchema = z.object({
     .max(500, 'Dietary requirements cannot exceed 500 characters')
     .transform(s => s.replace(/[<>]/g, ''))
     .optional(),
+  ageGroup: AgeGroupSchema.optional(),
 });
 
 /**
@@ -87,6 +93,7 @@ export const UpdateGuestSchema = z.object({
     .max(500, 'Dietary requirements cannot exceed 500 characters')
     .transform(s => s.replace(/[<>]/g, ''))
     .optional(),
+  ageGroup: AgeGroupSchema.optional(),
 });
 
 /**
@@ -102,6 +109,7 @@ export const GuestSchema = z.object({
   tags: z.array(z.string()),
   rsvp: RSVPStatusSchema.optional(),
   dietaryRequirements: z.string().trim().max(500).optional(),
+  ageGroup: AgeGroupSchema.optional(),
 });
 
 /**
@@ -207,6 +215,7 @@ export const FamilySchema = z.object({
   eventId: z.string().regex(/^event-\d+$/, 'Invalid event ID format'),
   name: z.string().trim().min(1).max(100),
   members: z.array(z.string()),
+  groupId: z.string().optional(),
 });
 
 // ============================================================

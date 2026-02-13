@@ -3,13 +3,14 @@
  * Displays a collapsible family group with member list
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
   Typography,
   Button,
+  IconButton,
   Checkbox,
   Box,
   Stack,
@@ -30,6 +31,7 @@ import { updateGuest } from '../api';
 import { GuestPresenceMap } from '../api';
 import GuestItem from './GuestItem';
 import EditFamilyForm from './EditFamilyForm';
+import { FamilyRsvpSyncDialog } from './RsvpSyncDialog';
 
 interface EventWithPermission extends Event {
   permission: PermissionLevel;
@@ -49,9 +51,11 @@ interface FamilyGroupProps {
   selectedGuestIds?: Set<string>;
   onSelectionChange?: (guestId: string, selected: boolean) => void;
   onFamilySelectionChange?: (guestIds: string[], selected: boolean) => void;
+  isExpanded?: boolean;
+  onToggleExpanded?: (familyId: string, expanded: boolean) => void;
 }
 
-export default function FamilyGroup({
+export default memo(function FamilyGroup({
   family,
   guests,
   allGuests,
@@ -65,17 +69,24 @@ export default function FamilyGroup({
   selectedGuestIds = new Set(),
   onSelectionChange,
   onFamilySelectionChange,
+  isExpanded = true,
+  onToggleExpanded,
 }: FamilyGroupProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [isUpdatingRsvp, setIsUpdatingRsvp] = useState(false);
+  const [familyRsvpSyncInfo, setFamilyRsvpSyncInfo] = useState<{ status: RSVPStatus } | null>(null);
   const checkboxRef = useRef<HTMLInputElement>(null);
 
+  // familyMembers: filtered for display (respects search)
   const familyMembers = family.members
     .map(id => guests.find(g => g.id === id && g.familyId === family.id))
     .filter((g): g is Guest => g !== undefined);
 
+  // allFamilyMembers: ALL members regardless of search, for RSVP operations
   const guestsForEditing = allGuests || guests;
+  const allFamilyMembers = family.members
+    .map(id => guestsForEditing.find(g => g.id === id && g.familyId === family.id))
+    .filter((g): g is Guest => g !== undefined);
 
   const allMembersSelected = familyMembers.length > 0 &&
     familyMembers.every(m => selectedGuestIds.has(m.id));
@@ -94,10 +105,10 @@ export default function FamilyGroup({
     onFamilySelectionChange?.(memberIds, e.target.checked);
   };
 
-  // Calculate family RSVP status (show common status or null if mixed)
+  // Calculate family RSVP status from ALL members (not just filtered/visible ones)
   const getFamilyRsvpStatus = (): RSVPStatus | null => {
-    if (familyMembers.length === 0) return null;
-    const statuses = familyMembers.map(m => m.rsvp || 'pending');
+    if (allFamilyMembers.length === 0) return null;
+    const statuses = allFamilyMembers.map(m => m.rsvp || 'pending');
     const firstStatus = statuses[0];
     return statuses.every(s => s === firstStatus) ? firstStatus : null;
   };
@@ -112,13 +123,21 @@ export default function FamilyGroup({
 
     setIsUpdatingRsvp(true);
     try {
-      // Update all family members
+      // Update ALL family members, not just the filtered/visible ones
       await Promise.all(
-        familyMembers.map(member =>
+        allFamilyMembers.map(member =>
           updateGuest(eventId, member.id, { rsvp: newStatus })
         )
       );
-      onUpdate();
+
+      // If family exists in other events, show sync dialog and defer data reload
+      // The dialog's onClose/onSynced callbacks will trigger onUpdate()
+      const commonEvents = commonOtherEvents;
+      if (commonEvents.length > 0) {
+        setFamilyRsvpSyncInfo({ status: newStatus });
+      } else {
+        onUpdate();
+      }
     } catch (error) {
       console.error('Failed to update family RSVP:', error);
     } finally {
@@ -126,11 +145,38 @@ export default function FamilyGroup({
     }
   };
 
+  // Find events where ANY family member exists (other than current) — memoized
+  // For each event, collect only the guestIds of members that exist there
+  const commonOtherEvents = useMemo((): Array<{ eventId: string; eventName: string; guestIds: string[] }> => {
+    if (allFamilyMembers.length === 0) return [];
+
+    // For each member, get their other events
+    const memberPresences = allFamilyMembers.map(member => guestPresence[member.id] || []);
+
+    // Collect all unique events where ANY member exists, with their guestIds
+    const eventMap = new Map<string, { eventName: string; guestIds: string[] }>();
+
+    for (const presence of memberPresences) {
+      for (const p of presence) {
+        if (!eventMap.has(p.id)) {
+          eventMap.set(p.id, { eventName: p.name, guestIds: [] });
+        }
+        eventMap.get(p.id)!.guestIds.push(p.guestId);
+      }
+    }
+
+    return Array.from(eventMap.entries()).map(([eventId, { eventName, guestIds }]) => ({
+      eventId,
+      eventName,
+      guestIds,
+    }));
+  }, [allFamilyMembers, guestPresence]);
+
   return (
     <>
       <Accordion
         expanded={isExpanded}
-        onChange={(_, expanded) => !selectionMode && setIsExpanded(expanded)}
+        onChange={(_, expanded) => !selectionMode && onToggleExpanded?.(family.id, expanded)}
         disableGutters
         sx={{
           border: 1,
@@ -143,6 +189,7 @@ export default function FamilyGroup({
       >
         <AccordionSummary
           expandIcon={!selectionMode ? <ExpandMoreIcon /> : null}
+          component="div"
           sx={{
             bgcolor: 'action.hover',
             cursor: selectionMode ? 'default' : 'pointer',
@@ -164,14 +211,47 @@ export default function FamilyGroup({
 
           <GroupIcon color="primary" />
 
-          <Typography variant="subtitle1" fontWeight={600} sx={{ flex: 1 }}>
-            {family.name}
-          </Typography>
+          <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="subtitle1" fontWeight={600} noWrap>
+              {family.name}
+            </Typography>
+            <Box
+              sx={{
+                display: { xs: 'none', sm: 'flex' },
+                gap: 0.5,
+                maxWidth: '50%',
+                overflow: 'hidden',
+                flexWrap: 'nowrap',
+              }}
+            >
+              {allFamilyMembers.map((member) => (
+                <Chip
+                  key={member.id}
+                  label={member.firstName || member.lastName}
+                  size="small"
+                  variant="outlined"
+                  sx={{
+                    height: 20,
+                    fontSize: '0.7rem',
+                    flexShrink: 0,
+                    '& .MuiChip-label': { px: 1 },
+                  }}
+                />
+              ))}
+            </Box>
+          </Box>
 
           <Chip
             label={`${familyMembers.length} member${familyMembers.length !== 1 ? 's' : ''}`}
             size="small"
             variant="outlined"
+            sx={{ display: { xs: 'none', sm: 'flex' } }}
+          />
+          <Chip
+            label={`${familyMembers.length}`}
+            size="small"
+            variant="outlined"
+            sx={{ display: { xs: 'flex', sm: 'none' } }}
           />
 
           {/* Family RSVP Toggle */}
@@ -228,17 +308,30 @@ export default function FamilyGroup({
           )}
 
           {!readOnly && !selectionMode && (
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<EditIcon />}
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowEditModal(true);
-              }}
-            >
-              Edit
-            </Button>
+            <>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<EditIcon />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowEditModal(true);
+                }}
+                sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
+              >
+                Edit
+              </Button>
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowEditModal(true);
+                }}
+                sx={{ display: { xs: 'inline-flex', sm: 'none' } }}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </>
           )}
         </AccordionSummary>
 
@@ -254,6 +347,8 @@ export default function FamilyGroup({
                   readOnly={readOnly}
                   events={events}
                   guestPresence={guestPresence[guest.id]}
+                  familyGroupId={family.groupId}
+                  familyName={family.name}
                   selectionMode={selectionMode}
                   isSelected={selectedGuestIds.has(guest.id)}
                   onSelectionChange={onSelectionChange}
@@ -282,6 +377,21 @@ export default function FamilyGroup({
           guestPresenceMap={guestPresence}
         />
       )}
+      {familyRsvpSyncInfo && (
+        <FamilyRsvpSyncDialog
+          familyName={family.name}
+          newStatus={familyRsvpSyncInfo.status}
+          eventGuestPairs={commonOtherEvents}
+          onClose={() => {
+            setFamilyRsvpSyncInfo(null);
+            onUpdate();
+          }}
+          onSynced={() => {
+            setFamilyRsvpSyncInfo(null);
+            onUpdate();
+          }}
+        />
+      )}
     </>
   );
-}
+});

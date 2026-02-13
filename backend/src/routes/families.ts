@@ -170,6 +170,8 @@ router.put('/:id', requireEventAdmin, (req: Request, res: Response) => {
     return sendNotFound(res, 'Family');
   }
 
+  // Family name syncing across groupId is handled by the frontend with a confirmation dialog
+
   sendSuccess(res, updated);
 });
 
@@ -265,8 +267,11 @@ router.post('/:id/members', requireEventAdmin, (req: Request, res: Response) => 
   // Update guest to reference family
   store.updateGuest(guestId, { familyId: family.id });
 
+  // Sync member across all families in the same group
+  const syncedCount = store.addMemberAcrossGroup(family.id, guest);
+
   const updatedFamily = store.getFamily(family.id);
-  sendSuccess(res, updatedFamily);
+  sendSuccess(res, { ...updatedFamily, syncedToFamilies: syncedCount });
 });
 
 // DELETE /api/events/:eventId/families/:id/members/:guestId - Remove a guest from a family (admin+)

@@ -35,30 +35,19 @@ router.get('/', permissions_1.requireEventViewer, (req, res) => {
 router.get('/presence', permissions_1.requireEventViewer, (req, res) => {
     const eventId = req.params.eventId;
     const eventGuests = store_1.store.getGuestsForEvent(eventId);
-    const allGuests = store_1.store.getAllGuests();
     const allEvents = store_1.store.getAllEvents();
-    // Build a map of guest name -> array of guests in other events
-    const guestNameToGuestsInOtherEvents = new Map();
-    // First, group all guests by normalized name
-    for (const guest of allGuests) {
-        const key = `${guest.firstName.toLowerCase()} ${guest.lastName.toLowerCase()}`.trim();
-        if (!key)
-            continue;
-        if (!guestNameToGuestsInOtherEvents.has(key)) {
-            guestNameToGuestsInOtherEvents.set(key, []);
-        }
-        guestNameToGuestsInOtherEvents.get(key).push(guest);
+    // Pre-build event map for O(1) lookups
+    const eventMap = new Map();
+    for (const event of allEvents) {
+        eventMap.set(event.id, event);
     }
     // Convert to response format: guestId -> [{id: eventId, name: eventName, guestId: guestIdInThatEvent}]
     const result = {};
-    // For each guest in the current event, find other events they're in (that user can view)
+    // For each guest in the current event, use name index for O(1) lookup
     for (const guest of eventGuests) {
-        const key = `${guest.firstName.toLowerCase()} ${guest.lastName.toLowerCase()}`.trim();
-        if (!key)
+        if (!guest.firstName && !guest.lastName)
             continue;
-        const guestsWithSameName = guestNameToGuestsInOtherEvents.get(key);
-        if (!guestsWithSameName)
-            continue;
+        const guestsWithSameName = store_1.store.getGuestsByName(guest.firstName, guest.lastName);
         // Use a Map to deduplicate by event ID (keep only one guest per event)
         const otherEventEntriesMap = new Map();
         for (const otherGuest of guestsWithSameName) {
@@ -78,7 +67,7 @@ router.get('/presence', permissions_1.requireEventViewer, (req, res) => {
                 }
             }
             if (hasAccess) {
-                const event = allEvents.find(e => e.id === otherGuest.eventId);
+                const event = eventMap.get(otherGuest.eventId);
                 if (event) {
                     otherEventEntriesMap.set(otherGuest.eventId, {
                         id: event.id,
@@ -118,7 +107,7 @@ router.post('/', permissions_1.requireEventAdmin, (req, res) => {
     if (!validation.success) {
         return (0, apiResponse_1.sendValidationError)(res, validation.error, validation.details);
     }
-    const { firstName, lastName, familyId, tags, rsvp, dietaryRequirements } = validation.data;
+    const { firstName, lastName, familyId, tags, rsvp, dietaryRequirements, ageGroup } = validation.data;
     // If familyId provided, verify it belongs to this event
     if (familyId) {
         const family = store_1.store.getFamily(familyId);
@@ -148,6 +137,7 @@ router.post('/', permissions_1.requireEventAdmin, (req, res) => {
         tags: inheritedTags,
         rsvp,
         dietaryRequirements,
+        ageGroup,
     });
     // If added to a family, update the family's member list
     if (familyId) {
@@ -175,7 +165,7 @@ router.put('/:id', permissions_1.requireEventAdmin, (req, res) => {
     if (!validation.success) {
         return (0, apiResponse_1.sendValidationError)(res, validation.error, validation.details);
     }
-    const { firstName, lastName, familyId, tags, rsvp, dietaryRequirements } = validation.data;
+    const { firstName, lastName, familyId, tags, rsvp, dietaryRequirements, ageGroup } = validation.data;
     // If familyId provided, verify it belongs to this event
     if (familyId !== undefined && familyId !== null) {
         const family = store_1.store.getFamily(familyId);
@@ -196,6 +186,8 @@ router.put('/:id', permissions_1.requireEventAdmin, (req, res) => {
         updates.rsvp = rsvp;
     if (dietaryRequirements !== undefined)
         updates.dietaryRequirements = dietaryRequirements;
+    if (ageGroup !== undefined)
+        updates.ageGroup = ageGroup;
     // Handle family membership changes
     const oldFamilyId = guest.familyId;
     const newFamilyId = updates.familyId !== undefined ? updates.familyId : oldFamilyId;
@@ -219,25 +211,28 @@ router.put('/:id', permissions_1.requireEventAdmin, (req, res) => {
             }
         }
     }
+    // Capture old name before applying update (needed to find matches when name changes)
+    const oldFirstName = guest.firstName;
+    const oldLastName = guest.lastName;
     const updated = store_1.store.updateGuest(req.params.id, updates);
     if (!updated) {
         return (0, apiResponse_1.sendNotFound)(res, 'Guest');
     }
-    // Sync tags across all events for guests with the same name
-    // Tags represent relationship/location which should be consistent across events
-    if (tags !== undefined) {
-        const guestFirstName = updated.firstName.toLowerCase();
-        const guestLastName = updated.lastName.toLowerCase();
-        const allGuests = store_1.store.getAllGuests();
-        for (const otherGuest of allGuests) {
-            // Skip the guest we just updated and guests in the same event
+    // Sync non-name fields across all events for guests with the same name
+    // Name syncing is handled by the frontend with a confirmation dialog
+    const syncFields = {};
+    if (tags !== undefined)
+        syncFields.tags = tags;
+    if (dietaryRequirements !== undefined)
+        syncFields.dietaryRequirements = dietaryRequirements;
+    if (ageGroup !== undefined)
+        syncFields.ageGroup = ageGroup;
+    if (Object.keys(syncFields).length > 0) {
+        const matchingGuests = store_1.store.getGuestsByName(oldFirstName, oldLastName);
+        for (const otherGuest of matchingGuests) {
             if (otherGuest.id === updated.id)
                 continue;
-            // Match by name (case-insensitive)
-            if (otherGuest.firstName.toLowerCase() === guestFirstName &&
-                otherGuest.lastName.toLowerCase() === guestLastName) {
-                store_1.store.updateGuest(otherGuest.id, { tags });
-            }
+            store_1.store.updateGuest(otherGuest.id, syncFields);
         }
     }
     (0, apiResponse_1.sendSuccess)(res, updated);
