@@ -11,7 +11,7 @@ A web application for managing wedding guest lists with support for multiple eve
 - **Frontend**: React 18, TypeScript, Vite, Material UI v6 (Material Design 3)
 - **Backend**: Node.js, Express, TypeScript, Zod (validation)
 - **Data Store**: In-memory with async JSON file persistence (`data/data.json`)
-- **Testing**: Jest (backend), Vitest (frontend)
+- **Testing**: Jest + supertest (backend), Vitest + @testing-library/react (frontend)
 - **Deployment**: Docker + Docker Compose + Nginx
 
 ## Project Structure
@@ -20,13 +20,15 @@ A web application for managing wedding guest lists with support for multiple eve
 wedding-guest-list/
 ├── backend/                    # Express API server
 │   └── src/
-│       ├── index.ts           # Server entry, route mounting, graceful shutdown
+│       ├── index.ts           # Server entry, startup, graceful shutdown
+│       ├── app.ts             # Express app factory (routes, middleware)
 │       ├── config.ts          # Central configuration with env validation
 │       ├── store.ts           # In-memory data store with async persistence
 │       ├── sessionStore.ts    # Persistent session management
 │       ├── validation.ts      # Zod schemas for input validation
 │       ├── apiResponse.ts     # Standardized API response helpers
 │       ├── middleware/auth.ts # Bearer token authentication
+│       ├── test/apiHelper.ts  # Test helpers (auth sessions, supertest agent)
 │       └── routes/            # API route handlers
 │           ├── auth.ts        # Authentication routes
 │           ├── events.ts      # Event management routes
@@ -48,6 +50,9 @@ wedding-guest-list/
 │       ├── theme/             # Material UI theming
 │       │   ├── theme.ts       # Theme configuration (colors, typography)
 │       │   └── ThemeContext.tsx   # Dark/light mode provider
+│       ├── test/              # Test utilities
+│       │   ├── setup.ts       # jest-dom matchers
+│       │   └── TestWrapper.tsx # MUI ThemeProvider wrapper for tests
 │       └── components/        # UI components (all using MUI)
 │           ├── Toast.tsx      # Snackbar notifications
 │           ├── Login.tsx      # Login form
@@ -69,11 +74,13 @@ wedding-guest-list/
 ├── shared/                     # Shared TypeScript types and utilities
 │   ├── types/                 # Guest, Family, Category, Event, User interfaces
 │   └── utils/                 # Color assignment, string capitalization
-├── data/                       # Persistent data directory
+├── data/                       # Persistent data directory (gitignored)
 │   ├── data.json              # All application data
 │   └── sessions.json          # Active sessions
-├── docker-compose.yml          # Standard Docker deployment
-├── zimaos-compose.yaml         # ZimaOS/CasaOS deployment
+├── .env                        # Environment config (gitignored)
+├── .env.example                # Template for .env
+├── docker-compose.yml          # Docker deployment (with CasaOS metadata)
+├── Makefile                    # Build, test, and deploy commands
 ├── Dockerfile.backend          # Backend container
 ├── Dockerfile.frontend         # Frontend container
 └── nginx.conf                  # Nginx reverse proxy config
@@ -94,23 +101,27 @@ cd backend && npm run dev
 cd frontend && npm run dev
 ```
 
-### Docker
+### Docker (local)
 ```bash
 docker compose up -d --build     # Build and start
 docker compose down              # Stop services
 docker compose logs -f           # View logs
-
-# ZimaOS deployment
-docker compose -f zimaos-compose.yaml up -d --build
 ```
 
 ### Testing
 ```bash
+# All tests
+make test
+
 # Backend tests
-cd backend && npm test
+make test-backend                    # All backend tests (unit + API)
+cd backend && npm run test:unit      # Unit tests only (167 tests)
+cd backend && npm run test:api       # API integration tests only (32 tests)
 
 # Frontend tests
-cd frontend && npm test
+make test-frontend                   # All frontend tests (unit + component)
+cd frontend && npm run test:unit     # Hook/utility tests only (27 tests)
+cd frontend && npm run test:component # Component tests only (56 tests)
 ```
 
 ### Building
@@ -122,9 +133,21 @@ cd backend && npm run build
 cd frontend && npm run build
 ```
 
+### Deployment (to ZimaOS server)
+
+Requires `sshpass` (`brew install sshpass`) and deployment vars in `.env`:
+```bash
+make deploy-server                   # Run tests, backup data, git pull, rebuild, restart
+make deploy-server SKIP_TESTS=1      # Deploy without running tests first
+make deploy-backup                   # Backup server data only
+make deploy-status                   # Check container health
+make deploy-logs                     # Tail server logs (Ctrl+C to stop)
+make deploy-rollback                 # Restore most recent data backup
+```
+
 ## Environment Variables
 
-Create `.env` in project root:
+Create `.env` in project root (see `.env.example` for template):
 ```bash
 # Authentication (REQUIRED in production)
 AUTH_USERNAME=username
@@ -147,6 +170,12 @@ CORS_ALLOWED_ORIGINS=https://example.com
 MAX_NAME_LENGTH=100
 MAX_CATEGORY_NAME_LENGTH=50
 MAX_TAGS_PER_GUEST=20
+
+# Server deployment (for make deploy-server)
+DEPLOY_HOST=root@192.168.1.9
+DEPLOY_PASS=your_server_password
+DEPLOY_REPO=/DATA/.media/Cloud-Storage/wedding-guest-list
+DEPLOY_DATA_DIR=/DATA/AppData/wedding-guest-list/data
 ```
 
 **Note**: In production, `AUTH_USERNAME` and `AUTH_PASSWORD` are required. The server will fail to start without them. In development, it defaults to `dev/dev` with a warning.

@@ -49,7 +49,8 @@ A modern web application for managing wedding guest lists with support for multi
 - **Frontend**: React 18, TypeScript, Vite, Material UI v6
 - **Backend**: Node.js, Express, TypeScript, Zod (validation)
 - **Data Store**: JSON file persistence with in-memory caching
-- **Deployment**: Docker, Nginx
+- **Testing**: Jest + supertest (backend), Vitest + @testing-library/react (frontend)
+- **Deployment**: Docker, Nginx, ZimaOS/CasaOS
 
 ## Getting Started
 
@@ -72,20 +73,10 @@ cd frontend
 npm install
 ```
 
-3. Create a `.env` file in the project root:
+3. Create a `.env` file in the project root (copy from `.env.example`):
 ```bash
-# Required for production
-AUTH_USERNAME=your_username
-AUTH_PASSWORD=your_password
-
-# Optional second user
-AUTH_USERNAME_2=second_user
-AUTH_PASSWORD_2=second_password
-
-# Optional settings
-NODE_ENV=development
-PORT=5000
-SESSION_DURATION_HOURS=24
+cp .env.example .env
+# Edit .env with your credentials
 ```
 
 ### Running the Application
@@ -123,18 +114,33 @@ The application will be available on port 70.
 
 ### ZimaOS / CasaOS Deployment
 
-For ZimaBoard or CasaOS systems:
+The `docker-compose.yml` includes CasaOS metadata and is configured for ZimaOS out of the box. Data is persisted at `/DATA/AppData/wedding-guest-list/data` on the host.
 
-1. Create the data directory:
+1. Clone the repo on your ZimaOS server
+2. Create a `.env` file with credentials
+3. Deploy:
 ```bash
-mkdir -p /DATA/AppData/wedding-guest-list/data
+docker compose up -d --build
 ```
 
-2. Create a `.env` file with credentials
+### Remote Deployment via Makefile
 
-3. Deploy using the ZimaOS compose file:
+Requires `sshpass` on your local machine and deployment vars in `.env`:
 ```bash
-docker compose -f zimaos-compose.yaml up -d --build
+DEPLOY_HOST=root@192.168.1.9
+DEPLOY_PASS=your_server_password
+DEPLOY_REPO=/path/to/repo/on/server
+DEPLOY_DATA_DIR=/DATA/AppData/wedding-guest-list/data
+```
+
+Commands:
+```bash
+make deploy-server              # Run tests, backup data, pull, rebuild, restart
+make deploy-server SKIP_TESTS=1 # Deploy without running tests
+make deploy-backup              # Backup server data only
+make deploy-status              # Check container health
+make deploy-logs                # Tail server logs (Ctrl+C to stop)
+make deploy-rollback            # Restore most recent data backup
 ```
 
 ## Project Structure
@@ -143,26 +149,30 @@ docker compose -f zimaos-compose.yaml up -d --build
 wedding-guest-list/
 ├── backend/                 # Node.js/Express backend
 │   └── src/
-│       ├── index.ts         # Server entry point
+│       ├── index.ts         # Server entry point, startup, graceful shutdown
+│       ├── app.ts           # Express app factory (routes, middleware)
 │       ├── config.ts        # Configuration management
 │       ├── store.ts         # Data store with persistence
 │       ├── validation.ts    # Zod schemas
 │       ├── apiResponse.ts   # Standardized API responses
-│       └── routes/          # API route handlers
+│       ├── test/            # Test helpers (auth sessions, supertest)
+│       └── routes/          # API route handlers + *.api.test.ts
 ├── frontend/                # React frontend
 │   └── src/
-│       ├── components/      # React components
+│       ├── components/      # React components + *.test.tsx
 │       ├── contexts/        # Auth and Event contexts
-│       ├── hooks/           # Custom React hooks
+│       ├── hooks/           # Custom React hooks + tests
 │       ├── theme/           # MUI theme configuration
+│       ├── test/            # Test setup (jest-dom, MUI wrapper)
 │       ├── App.tsx          # Main app component
 │       └── api.ts           # API client
-├── shared/                  # Shared TypeScript types
+├── shared/                  # Shared TypeScript types and utilities
 │   ├── types/
 │   └── utils/
-├── data/                    # Persistent data storage
-├── docker-compose.yml       # Standard Docker deployment
-├── zimaos-compose.yaml      # ZimaOS/CasaOS deployment
+├── data/                    # Persistent data storage (gitignored)
+├── .env.example             # Template for environment variables
+├── Makefile                 # Build, test, and deploy commands
+├── docker-compose.yml       # Docker deployment (with CasaOS metadata)
 ├── Dockerfile.backend       # Backend container
 ├── Dockerfile.frontend      # Frontend container
 └── nginx.conf               # Nginx configuration
@@ -234,6 +244,10 @@ All API responses follow the format: `{ success: boolean, data?: T, error?: stri
 | `PORT` | No | `5000` | Backend server port |
 | `SESSION_DURATION_HOURS` | No | `24` | Session expiry time |
 | `DATA_FILE_PATH` | No | `../data/data.json` | Data file location |
+| `DEPLOY_HOST` | No | - | SSH host for deployment (e.g. `root@192.168.1.9`) |
+| `DEPLOY_PASS` | No | - | SSH password for deployment |
+| `DEPLOY_REPO` | No | - | Path to git repo on server |
+| `DEPLOY_DATA_DIR` | No | - | Path to data directory on server |
 
 ## Development
 
@@ -253,16 +267,19 @@ npm run build
 
 ### Running Tests
 
-Backend tests:
 ```bash
-cd backend
-npm test
-```
+# All tests (backend + frontend)
+make test
 
-Frontend tests:
-```bash
-cd frontend
-npm test
+# Backend
+make test-backend                    # All backend tests (199 tests)
+cd backend && npm run test:unit      # Unit tests only (167 tests)
+cd backend && npm run test:api       # API integration tests only (32 tests)
+
+# Frontend
+make test-frontend                   # All frontend tests (83 tests)
+cd frontend && npm run test:unit     # Hook/utility tests only (27 tests)
+cd frontend && npm run test:component # Component tests only (56 tests)
 ```
 
 ## License
