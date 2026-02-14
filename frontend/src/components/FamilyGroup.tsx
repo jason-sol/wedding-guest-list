@@ -41,6 +41,8 @@ interface FamilyGroupProps {
   family: Family;
   guests: Guest[];
   allGuests?: Guest[];
+  guestMap?: Map<string, Guest>;
+  allGuestMap?: Map<string, Guest>;
   categories: CategoryInfo[];
   onUpdate: () => void;
   eventId: string;
@@ -59,6 +61,8 @@ export default memo(function FamilyGroup({
   family,
   guests,
   allGuests,
+  guestMap,
+  allGuestMap,
   categories,
   onUpdate,
   eventId,
@@ -78,14 +82,21 @@ export default memo(function FamilyGroup({
   const checkboxRef = useRef<HTMLInputElement>(null);
 
   // familyMembers: filtered for display (respects search)
+  // Use Map for O(1) lookups when available, fall back to Array.find()
   const familyMembers = family.members
-    .map(id => guests.find(g => g.id === id && g.familyId === family.id))
+    .map(id => {
+      const g = guestMap ? guestMap.get(id) : guests.find(g => g.id === id);
+      return g && g.familyId === family.id ? g : undefined;
+    })
     .filter((g): g is Guest => g !== undefined);
 
   // allFamilyMembers: ALL members regardless of search, for RSVP operations
   const guestsForEditing = allGuests || guests;
   const allFamilyMembers = family.members
-    .map(id => guestsForEditing.find(g => g.id === id && g.familyId === family.id))
+    .map(id => {
+      const g = allGuestMap ? allGuestMap.get(id) : guestsForEditing.find(g => g.id === id);
+      return g && g.familyId === family.id ? g : undefined;
+    })
     .filter((g): g is Guest => g !== undefined);
 
   const allMembersSelected = familyMembers.length > 0 &&
@@ -178,6 +189,7 @@ export default memo(function FamilyGroup({
         expanded={isExpanded}
         onChange={(_, expanded) => !selectionMode && onToggleExpanded?.(family.id, expanded)}
         disableGutters
+        slotProps={{ transition: { unmountOnExit: true } }}
         sx={{
           border: 1,
           borderColor: someMembersSelected ? 'primary.main' : 'divider',
@@ -201,6 +213,7 @@ export default memo(function FamilyGroup({
         >
           {selectionMode && (
             <Checkbox
+              disableRipple
               inputRef={checkboxRef}
               checked={allMembersSelected}
               onChange={handleFamilyCheckboxChange}
@@ -275,6 +288,7 @@ export default memo(function FamilyGroup({
                     }}
                   >
                     <ToggleButton
+                      disableRipple
                       value="accepted"
                       sx={{
                         '&.Mui-selected': {
@@ -286,10 +300,11 @@ export default memo(function FamilyGroup({
                     >
                       <EventAvailableIcon sx={{ fontSize: '1rem' }} />
                     </ToggleButton>
-                    <ToggleButton value="pending">
+                    <ToggleButton disableRipple value="pending">
                       <HelpOutlineIcon sx={{ fontSize: '1rem' }} />
                     </ToggleButton>
                     <ToggleButton
+                      disableRipple
                       value="declined"
                       sx={{
                         '&.Mui-selected': {
@@ -363,7 +378,10 @@ export default memo(function FamilyGroup({
         <EditFamilyForm
           family={family}
           familyGuests={family.members
-            .map(id => guestsForEditing.find(g => g.id === id && g.familyId === family.id))
+            .map(id => {
+              const g = allGuestMap ? allGuestMap.get(id) : guestsForEditing.find(g => g.id === id);
+              return g && g.familyId === family.id ? g : undefined;
+            })
             .filter((g): g is Guest => g !== undefined)}
           allGuests={guestsForEditing}
           categories={categories}

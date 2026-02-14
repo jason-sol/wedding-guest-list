@@ -154,6 +154,7 @@ export default memo(function GuestItem({
       >
         {selectionMode && (
           <Checkbox
+            disableRipple
             checked={isSelected}
             onChange={(e) => onSelectionChange?.(guest.id, e.target.checked)}
             inputProps={{ 'aria-label': `Select ${guest.firstName} ${guest.lastName}` }}
@@ -215,6 +216,7 @@ export default memo(function GuestItem({
                 }}
               >
                 <ToggleButton
+                  disableRipple
                   value="accepted"
                   sx={{
                     '&.Mui-selected': {
@@ -228,12 +230,13 @@ export default memo(function GuestItem({
                     <EventAvailableIcon fontSize="small" />
                   </Tooltip>
                 </ToggleButton>
-                <ToggleButton value="pending">
+                <ToggleButton disableRipple value="pending">
                   <Tooltip title="Pending">
                     <HelpOutlineIcon fontSize="small" />
                   </Tooltip>
                 </ToggleButton>
                 <ToggleButton
+                  disableRipple
                   value="declined"
                   sx={{
                     '&.Mui-selected': {

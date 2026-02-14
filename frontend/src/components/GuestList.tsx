@@ -3,7 +3,7 @@
  * Main container for displaying guests and families with selection and bulk actions
  */
 
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect, useTransition } from 'react';
 import {
   Box,
   Paper,
@@ -13,6 +13,7 @@ import {
   Alert,
   Chip,
   Stack,
+  CircularProgress,
 } from '@mui/material';
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
@@ -162,8 +163,13 @@ export default function GuestList({
       }
     });
 
+    // Build Set of family IDs for O(1) lookup instead of O(n*m)
+    const familyIdsInFilter = new Set(
+      filteredGuests.map(g => g.familyId).filter(Boolean)
+    );
+
     const sortedFamilies = safeFamilies
-      .filter(f => filteredGuests.some(g => g.familyId === f.id))
+      .filter(f => familyIdsInFilter.has(f.id))
       .sort((a, b) => {
         const aLastName = lastNameMap.get(a.id) || '';
         const bLastName = lastNameMap.get(b.id) || '';
@@ -191,10 +197,65 @@ export default function GuestList({
     return { unifiedList: list, familyLastNameMap: lastNameMap };
   }, [filteredGuests, safeFamilies]);
 
+  // Progressive rendering: show first batch immediately, add more on scroll
+  const INITIAL_BATCH = 30;
+  const BATCH_SIZE = 20;
+  const [visibleCount, setVisibleCount] = useState(INITIAL_BATCH);
+  const [, startLoadTransition] = useTransition();
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Reset visible count when the list changes (e.g. filter applied)
+  const listLengthRef = useRef(unifiedList.length);
+  if (unifiedList.length !== listLengthRef.current) {
+    listLengthRef.current = unifiedList.length;
+    if (visibleCount > INITIAL_BATCH) {
+      setVisibleCount(INITIAL_BATCH);
+    }
+  }
+
+  // IntersectionObserver to load more items as user scrolls
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || visibleCount >= unifiedList.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          startLoadTransition(() => {
+            setVisibleCount(prev => Math.min(prev + BATCH_SIZE, unifiedList.length));
+          });
+        }
+      },
+      { rootMargin: '300px' }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [visibleCount, unifiedList.length]);
+
+  const visibleList = useMemo(
+    () => unifiedList.slice(0, visibleCount),
+    [unifiedList, visibleCount]
+  );
+
   const totalGuests = filteredGuests.length;
   const selectedGuests = filteredGuests.filter(g => selectedGuestIds.has(g.id));
   const allSelected = filteredGuests.length > 0 && filteredGuests.every(g => selectedGuestIds.has(g.id));
   const someSelected = selectedGuestIds.size > 0;
+
+  // Build guest Map for O(1) lookups in FamilyGroup
+  const guestMap = useMemo(() => {
+    const map = new Map<string, Guest>();
+    safeGuests.forEach(g => map.set(g.id, g));
+    return map;
+  }, [safeGuests]);
+
+  // Build filtered guest Map for O(1) lookups in FamilyGroup
+  const filteredGuestMap = useMemo(() => {
+    const map = new Map<string, Guest>();
+    filteredGuests.forEach(g => map.set(g.id, g));
+    return map;
+  }, [filteredGuests]);
 
   // Calculate RSVP and age group counts (memoized)
   const { rsvpCounts, adultCount, childCount } = useMemo(() => {
@@ -347,47 +408,67 @@ export default function GuestList({
       ) : (
         <>
           <Stack spacing={1.5}>
-            {unifiedList.map((item) => {
+            {visibleList.map((item) => {
               if (item.type === 'family') {
                 return (
-                  <FamilyGroup
+                  <Box
                     key={item.family.id}
-                    family={item.family}
-                    guests={filteredGuests}
-                    allGuests={safeGuests}
-                    categories={categories}
-                    onUpdate={onUpdate}
-                    eventId={eventId}
-                    readOnly={readOnly}
-                    events={events}
-                    guestPresence={guestPresence}
-                    selectionMode={selectionMode}
-                    selectedGuestIds={selectedGuestIds}
-                    onSelectionChange={handleSelectionChange}
-                    onFamilySelectionChange={handleFamilySelectionChange}
-                    isExpanded={!collapsedFamiliesRef.current.has(item.family.id)}
-                    onToggleExpanded={handleToggleExpanded}
-                  />
+                    sx={{ contain: 'layout style paint', contentVisibility: 'auto', containIntrinsicSize: 'auto 80px' }}
+                  >
+                    <FamilyGroup
+                      family={item.family}
+                      guests={filteredGuests}
+                      allGuests={safeGuests}
+                      guestMap={filteredGuestMap}
+                      allGuestMap={guestMap}
+                      categories={categories}
+                      onUpdate={onUpdate}
+                      eventId={eventId}
+                      readOnly={readOnly}
+                      events={events}
+                      guestPresence={guestPresence}
+                      selectionMode={selectionMode}
+                      selectedGuestIds={selectedGuestIds}
+                      onSelectionChange={handleSelectionChange}
+                      onFamilySelectionChange={handleFamilySelectionChange}
+                      isExpanded={!collapsedFamiliesRef.current.has(item.family.id)}
+                      onToggleExpanded={handleToggleExpanded}
+                    />
+                  </Box>
                 );
               } else {
                 return (
-                  <GuestItem
+                  <Box
                     key={item.guest.id}
-                    guest={item.guest}
-                    categories={categories}
-                    onUpdate={onUpdate}
-                    eventId={eventId}
-                    readOnly={readOnly}
-                    events={events}
-                    guestPresence={guestPresence[item.guest.id]}
-                    selectionMode={selectionMode}
-                    isSelected={selectedGuestIds.has(item.guest.id)}
-                    onSelectionChange={handleSelectionChange}
-                  />
+                    sx={{ contain: 'layout style paint', contentVisibility: 'auto', containIntrinsicSize: 'auto 60px' }}
+                  >
+                    <GuestItem
+                      guest={item.guest}
+                      categories={categories}
+                      onUpdate={onUpdate}
+                      eventId={eventId}
+                      readOnly={readOnly}
+                      events={events}
+                      guestPresence={guestPresence[item.guest.id]}
+                      selectionMode={selectionMode}
+                      isSelected={selectedGuestIds.has(item.guest.id)}
+                      onSelectionChange={handleSelectionChange}
+                    />
+                  </Box>
                 );
               }
             })}
           </Stack>
+
+          {/* Sentinel element for progressive loading */}
+          {visibleCount < unifiedList.length && (
+            <Box
+              ref={sentinelRef}
+              sx={{ display: 'flex', justifyContent: 'center', py: 3 }}
+            >
+              <CircularProgress size={24} />
+            </Box>
+          )}
 
           <Paper
             variant="outlined"

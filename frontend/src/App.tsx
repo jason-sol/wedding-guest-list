@@ -3,7 +3,7 @@
  * Includes AppBar, event tabs, guest management, and dark mode toggle
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, useDeferredValue, startTransition } from 'react';
 import {
   Box,
   Container,
@@ -19,6 +19,7 @@ import {
   Paper,
   Stack,
   CircularProgress,
+  LinearProgress,
   Alert,
   Chip,
   Dialog,
@@ -55,7 +56,6 @@ import PersonIcon from '@mui/icons-material/Person';
 import ChildCareIcon from '@mui/icons-material/ChildCare';
 import { Guest, Family, CategoryInfo, RSVPStatus, AgeGroup } from './types';
 import { fetchGuests, fetchFamilies, fetchCategories, fetchGuestPresence, importData, createEvent, GuestPresenceMap } from './api';
-import { useFilteredGuests } from './hooks/useFilteredGuests';
 import { useToast } from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
 import { useEvents } from './contexts/EventContext';
@@ -85,6 +85,7 @@ function App() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedRsvpStatuses, setSelectedRsvpStatuses] = useState<RSVPStatus[]>([]);
   const [selectedAgeGroups, setSelectedAgeGroups] = useState<AgeGroup[]>([]);
+  const [searchInput, setSearchInput] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [showGuestForm, setShowGuestForm] = useState(false);
   const [showFamilyForm, setShowFamilyForm] = useState(false);
@@ -92,6 +93,7 @@ function App() {
   const [showAddEventForm, setShowAddEventForm] = useState(false);
   const [newEventName, setNewEventName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
@@ -106,6 +108,12 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { showSuccess, showError } = useToast();
+
+  // Debounce search input so filtering only runs after the user pauses typing
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(searchInput), 150);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     if (shouldRestoreScrollRef.current && scrollPositionRef.current !== null && !loading) {
@@ -138,6 +146,8 @@ function App() {
   }, [currentEvent]);
 
   // Full load: all data (used for initial load, event switch, major operations)
+  // On initial load, shows a full spinner. On subsequent loads (event switch),
+  // keeps previous data visible and shows a subtle LinearProgress bar.
   const loadData = useCallback(async (preserveScroll = false) => {
     if (!currentEvent) {
       setGuests([]);
@@ -152,30 +162,35 @@ function App() {
       shouldRestoreScrollRef.current = true;
     }
 
-    setLoading(true);
+    const isInitialLoad = guests.length === 0 && families.length === 0;
+    if (isInitialLoad) {
+      setLoading(true);
+    } else {
+      setIsRefreshing(true);
+    }
     setError(null);
     try {
-      const [guestsData, familiesData, categoriesData, presenceData] = await Promise.all([
+      const [guestsData, familiesData, presenceData] = await Promise.all([
         fetchGuests(currentEvent.id),
         fetchFamilies(currentEvent.id),
-        fetchCategories(),
         fetchGuestPresence(currentEvent.id),
       ]);
-      setGuests(Array.isArray(guestsData) ? guestsData : []);
-      setFamilies(Array.isArray(familiesData) ? familiesData : []);
-      setCategories(Array.isArray(categoriesData) ? categoriesData : []);
-      setGuestPresence(presenceData || {});
+      startTransition(() => {
+        setGuests(Array.isArray(guestsData) ? guestsData : []);
+        setFamilies(Array.isArray(familiesData) ? familiesData : []);
+        setGuestPresence(presenceData || {});
+      });
     } catch (err) {
       console.error('Failed to load data:', err);
       setGuests([]);
       setFamilies([]);
-      setCategories([]);
       setGuestPresence({});
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
-  }, [currentEvent]);
+  }, [currentEvent, guests.length, families.length]);
 
   useEffect(() => {
     if (isAuthenticated && currentEvent) {
@@ -275,14 +290,39 @@ function App() {
     }
   };
 
-  const filteredGuests = useFilteredGuests({
-    guests,
-    selectedCategories,
-    searchTerm,
-    selectedRsvpStatuses,
-    families,
-    selectedAgeGroups,
-  });
+  // Deferred filter values: chips toggle instantly, list re-render is deferred
+  const deferredCategories = useDeferredValue(selectedCategories);
+  const deferredRsvpStatuses = useDeferredValue(selectedRsvpStatuses);
+  const deferredAgeGroups = useDeferredValue(selectedAgeGroups);
+  const deferredSearchTerm = useDeferredValue(searchTerm);
+
+  // Lightweight stats computation for the sticky search bar (single O(n) pass)
+  const { statsTotal, statsAdults, statsChildren } = useMemo(() => {
+    let filtered = guests;
+    if (deferredCategories.length > 0) {
+      filtered = filtered.filter(g => deferredCategories.some(cat => g.tags.includes(cat)));
+    }
+    if (deferredRsvpStatuses.length > 0) {
+      filtered = filtered.filter(g => deferredRsvpStatuses.includes(g.rsvp || 'pending'));
+    }
+    if (deferredAgeGroups.length > 0) {
+      filtered = filtered.filter(g => deferredAgeGroups.includes(g.ageGroup || 'adult'));
+    }
+    if (deferredSearchTerm.trim()) {
+      const s = deferredSearchTerm.toLowerCase().trim();
+      const familyIds = new Set(families.filter(f => f.name.toLowerCase().includes(s)).map(f => f.id));
+      filtered = filtered.filter(g => {
+        const name = `${g.firstName} ${g.lastName}`.toLowerCase();
+        return name.includes(s) || (g.familyId && familyIds.has(g.familyId));
+      });
+    }
+    let adults = 0, children = 0;
+    for (const g of filtered) {
+      if (g.ageGroup === 'child') children++;
+      else adults++;
+    }
+    return { statsTotal: filtered.length, statsAdults: adults, statsChildren: children };
+  }, [guests, families, deferredCategories, deferredRsvpStatuses, deferredAgeGroups, deferredSearchTerm]);
 
   if (isAuthenticated === false) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
@@ -567,11 +607,13 @@ function App() {
                       label={cat.name}
                       icon={isSelected ? <CheckIcon sx={{ fontSize: '1rem', color: `${textColor} !important` }} /> : undefined}
                       onClick={() => {
-                        if (isSelected) {
-                          setSelectedCategories(selectedCategories.filter(c => c !== cat.name));
-                        } else {
-                          setSelectedCategories([...selectedCategories, cat.name]);
-                        }
+                        startTransition(() => {
+                          if (isSelected) {
+                            setSelectedCategories(selectedCategories.filter(c => c !== cat.name));
+                          } else {
+                            setSelectedCategories([...selectedCategories, cat.name]);
+                          }
+                        });
                       }}
                       variant={isSelected ? 'filled' : 'outlined'}
                       sx={{
@@ -618,11 +660,13 @@ function App() {
                     label={config.label}
                     icon={isSelected ? <CheckIcon sx={{ fontSize: '1rem' }} /> : config.icon}
                     onClick={() => {
-                      if (isSelected) {
-                        setSelectedRsvpStatuses(selectedRsvpStatuses.filter(s => s !== status));
-                      } else {
-                        setSelectedRsvpStatuses([...selectedRsvpStatuses, status]);
-                      }
+                      startTransition(() => {
+                        if (isSelected) {
+                          setSelectedRsvpStatuses(selectedRsvpStatuses.filter(s => s !== status));
+                        } else {
+                          setSelectedRsvpStatuses([...selectedRsvpStatuses, status]);
+                        }
+                      });
                     }}
                     variant={isSelected ? 'filled' : 'outlined'}
                     color={isSelected ? config.color : 'default'}
@@ -658,11 +702,13 @@ function App() {
                     label={config.label}
                     icon={isSelected ? <CheckIcon sx={{ fontSize: '1rem' }} /> : config.icon}
                     onClick={() => {
-                      if (isSelected) {
-                        setSelectedAgeGroups(selectedAgeGroups.filter(a => a !== ageGroup));
-                      } else {
-                        setSelectedAgeGroups([...selectedAgeGroups, ageGroup]);
-                      }
+                      startTransition(() => {
+                        if (isSelected) {
+                          setSelectedAgeGroups(selectedAgeGroups.filter(a => a !== ageGroup));
+                        } else {
+                          setSelectedAgeGroups([...selectedAgeGroups, ageGroup]);
+                        }
+                      });
                     }}
                     variant={isSelected ? 'filled' : 'outlined'}
                     color={isSelected ? 'primary' : 'default'}
@@ -694,8 +740,8 @@ function App() {
             <TextField
               size="small"
               placeholder="Search guests and families..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               sx={{ minWidth: { xs: '100%', sm: 300 }, flex: 1, maxWidth: { sm: 400 } }}
               InputProps={{
                 startAdornment: (
@@ -703,9 +749,9 @@ function App() {
                     <SearchIcon color="action" />
                   </InputAdornment>
                 ),
-                endAdornment: searchTerm && (
+                endAdornment: searchInput && (
                   <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setSearchTerm('')}>
+                    <IconButton size="small" onClick={() => { setSearchInput(''); setSearchTerm(''); }}>
                       <ClearIcon fontSize="small" />
                     </IconButton>
                   </InputAdornment>
@@ -714,20 +760,20 @@ function App() {
             />
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
               <Chip
-                label={`Total: ${filteredGuests.length}`}
+                label={`Total: ${statsTotal}`}
                 variant="outlined"
                 color="primary"
                 size="small"
               />
               <Chip
                 icon={<PersonIcon sx={{ fontSize: '1rem' }} />}
-                label={`${filteredGuests.filter(g => (g.ageGroup || 'adult') === 'adult').length}`}
+                label={`${statsAdults}`}
                 variant="outlined"
                 size="small"
               />
               <Chip
                 icon={<ChildCareIcon sx={{ fontSize: '1rem' }} />}
-                label={`${filteredGuests.filter(g => g.ageGroup === 'child').length}`}
+                label={`${statsChildren}`}
                 variant="outlined"
                 size="small"
               />
@@ -735,26 +781,31 @@ function App() {
           </Box>
         </Paper>
 
+        {/* Refresh progress indicator */}
+        {isRefreshing && <LinearProgress sx={{ mb: 1, borderRadius: 1 }} />}
+
         {/* Guest List */}
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
             <CircularProgress />
           </Box>
         ) : currentEvent ? (
+          <Box sx={{ opacity: isRefreshing ? 0.6 : 1, transition: 'opacity 0.2s ease' }}>
           <GuestList
             guests={guests}
             families={families}
             categories={categories}
-            selectedCategories={selectedCategories}
-            selectedRsvpStatuses={selectedRsvpStatuses}
-            selectedAgeGroups={selectedAgeGroups}
-            searchTerm={searchTerm}
+            selectedCategories={deferredCategories}
+            selectedRsvpStatuses={deferredRsvpStatuses}
+            selectedAgeGroups={deferredAgeGroups}
+            searchTerm={deferredSearchTerm}
             onUpdate={handleUpdate}
             eventId={currentEvent.id}
             readOnly={!canEdit}
             events={events}
             guestPresence={guestPresence}
           />
+          </Box>
         ) : (
           <Alert severity="info">
             No events available.{user?.isOwner && ' Click + to create one.'}
