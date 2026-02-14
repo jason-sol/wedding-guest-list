@@ -605,7 +605,7 @@ function App() {
                     <Chip
                       key={cat.name}
                       label={cat.name}
-                      icon={isSelected ? <CheckIcon sx={{ fontSize: '1rem', color: `${textColor} !important` }} /> : undefined}
+                      icon={<CheckIcon sx={{ fontSize: '1rem', color: `${textColor} !important`, visibility: isSelected ? 'visible' : 'hidden' }} />}
                       onClick={() => {
                         startTransition(() => {
                           if (isSelected) {
@@ -622,6 +622,10 @@ function App() {
                         borderColor: isSelected ? cat.color : outlinedColor,
                         borderWidth: 2,
                         fontWeight: 600,
+                        '& .MuiChip-label': {
+                          transform: isSelected ? 'none' : 'translateX(-8px)',
+                          transition: 'transform 0.15s ease',
+                        },
                         '&:hover': {
                           bgcolor: isSelected ? cat.color : `${outlinedColor}20`,
                           filter: isSelected ? 'brightness(0.9)' : 'none',
@@ -632,11 +636,13 @@ function App() {
                   );
                 })
               )}
-              {selectedCategories.length > 0 && (
-                <Button size="small" onClick={() => setSelectedCategories([])}>
-                  Clear All
-                </Button>
-              )}
+              <Button
+                size="small"
+                onClick={() => setSelectedCategories([])}
+                sx={{ visibility: selectedCategories.length > 0 ? 'visible' : 'hidden' }}
+              >
+                Clear All
+              </Button>
             </Stack>
           </Box>
 
@@ -670,6 +676,7 @@ function App() {
                     }}
                     variant={isSelected ? 'filled' : 'outlined'}
                     color={isSelected ? config.color : 'default'}
+                    sx={{ transition: 'background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease' }}
                   />
                 );
               })}
@@ -712,6 +719,7 @@ function App() {
                     }}
                     variant={isSelected ? 'filled' : 'outlined'}
                     color={isSelected ? 'primary' : 'default'}
+                    sx={{ transition: 'background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease' }}
                   />
                 );
               })}
@@ -764,25 +772,30 @@ function App() {
                 variant="outlined"
                 color="primary"
                 size="small"
+                sx={{ minWidth: 75, fontVariantNumeric: 'tabular-nums' }}
               />
               <Chip
                 icon={<PersonIcon sx={{ fontSize: '1rem' }} />}
                 label={`${statsAdults}`}
                 variant="outlined"
                 size="small"
+                sx={{ minWidth: 55, fontVariantNumeric: 'tabular-nums' }}
               />
               <Chip
                 icon={<ChildCareIcon sx={{ fontSize: '1rem' }} />}
                 label={`${statsChildren}`}
                 variant="outlined"
                 size="small"
+                sx={{ minWidth: 55, fontVariantNumeric: 'tabular-nums' }}
               />
             </Stack>
           </Box>
         </Paper>
 
         {/* Refresh progress indicator */}
-        {isRefreshing && <LinearProgress sx={{ mb: 1, borderRadius: 1 }} />}
+        <Box sx={{ height: 4, mb: 1, borderRadius: 1, overflow: 'hidden', opacity: isRefreshing ? 1 : 0, transition: 'opacity 0.3s ease' }}>
+          <LinearProgress />
+        </Box>
 
         {/* Guest List */}
         {loading ? (
@@ -790,7 +803,7 @@ function App() {
             <CircularProgress />
           </Box>
         ) : currentEvent ? (
-          <Box sx={{ opacity: isRefreshing ? 0.6 : 1, transition: 'opacity 0.2s ease' }}>
+          <Box sx={{ opacity: isRefreshing ? 0.6 : 1, transition: 'opacity 0.3s ease' }}>
           <GuestList
             guests={guests}
             families={families}

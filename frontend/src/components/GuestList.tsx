@@ -283,16 +283,24 @@ export default function GuestList({
             variant={selectionMode ? 'contained' : 'outlined'}
             startIcon={selectionMode ? <CheckBoxIcon /> : <CheckBoxOutlineBlankIcon />}
             onClick={toggleSelectionMode}
+            sx={{ transition: 'all 0.2s ease' }}
           >
             {selectionMode ? 'Done Selecting' : 'Select Guests'}
           </Button>
 
-          {selectionMode && filteredGuests.length > 0 && (
+          <Box sx={{
+            display: 'flex',
+            opacity: selectionMode && filteredGuests.length > 0 ? 1 : 0,
+            maxWidth: selectionMode && filteredGuests.length > 0 ? 300 : 0,
+            overflow: 'hidden',
+            transition: 'opacity 0.25s ease, max-width 0.25s ease',
+          }}>
             <ButtonGroup variant="outlined" size="small">
               {!allSelected ? (
                 <Button
                   startIcon={<SelectAllIcon />}
                   onClick={() => setSelectedGuestIds(new Set(filteredGuests.map(g => g.id)))}
+                  sx={{ whiteSpace: 'nowrap' }}
                 >
                   Select All ({filteredGuests.length})
                 </Button>
@@ -300,32 +308,36 @@ export default function GuestList({
                 <Button
                   startIcon={<DeselectIcon />}
                   onClick={handleDeselectAll}
+                  sx={{ whiteSpace: 'nowrap' }}
                 >
                   Deselect All
                 </Button>
               )}
             </ButtonGroup>
-          )}
+          </Box>
         </Box>
       )}
 
       {/* Bulk Action Bar */}
-      {selectionMode && someSelected && (
-        <Paper
-          elevation={3}
-          sx={{
-            p: 2,
-            mb: 2,
-            display: 'flex',
-            flexDirection: { xs: 'column', sm: 'row' },
-            alignItems: { xs: 'stretch', sm: 'center' },
-            justifyContent: 'space-between',
-            bgcolor: 'primary.main',
-            color: 'primary.contrastText',
-            borderRadius: 2,
-            gap: 2,
-          }}
-        >
+      <Paper
+        elevation={selectionMode && someSelected ? 3 : 0}
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          alignItems: { xs: 'stretch', sm: 'center' },
+          justifyContent: 'space-between',
+          bgcolor: 'primary.main',
+          color: 'primary.contrastText',
+          borderRadius: 2,
+          gap: selectionMode && someSelected ? 2 : 0,
+          p: selectionMode && someSelected ? 2 : 0,
+          mb: selectionMode && someSelected ? 2 : 0,
+          maxHeight: selectionMode && someSelected ? 200 : 0,
+          opacity: selectionMode && someSelected ? 1 : 0,
+          overflow: 'hidden',
+          transition: 'all 0.3s ease',
+        }}
+      >
           <Stack direction="row" spacing={1} alignItems="center">
             <Chip
               label={`${selectedGuestIds.size} guest${selectedGuestIds.size !== 1 ? 's' : ''} selected`}
@@ -360,45 +372,47 @@ export default function GuestList({
             </Button>
           </Stack>
         </Paper>
-      )}
 
       {/* RSVP Summary Bar */}
-      {filteredGuests.length > 0 && (
-        <Paper
-          variant="outlined"
-          sx={{
-            p: 1.5,
-            mb: 2,
-            display: 'flex',
-            justifyContent: 'center',
-            gap: 3,
-            flexWrap: 'wrap',
-          }}
-        >
-          <Stack direction="row" spacing={0.5} alignItems="center">
-            <EventAvailableIcon color="success" fontSize="small" />
-            <Typography variant="body2">
-              <strong>{rsvpCounts.accepted}</strong> Attending
-            </Typography>
-          </Stack>
-          <Stack direction="row" spacing={0.5} alignItems="center">
-            <HelpOutlineIcon color="action" fontSize="small" />
-            <Typography variant="body2">
-              <strong>{rsvpCounts.pending}</strong> Pending
-            </Typography>
-          </Stack>
-          <Stack direction="row" spacing={0.5} alignItems="center">
-            <EventBusyIcon color="error" fontSize="small" />
-            <Typography variant="body2">
-              <strong>{rsvpCounts.declined}</strong> Declined
-            </Typography>
-          </Stack>
-        </Paper>
-      )}
+      <Paper
+        variant="outlined"
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          gap: 3,
+          flexWrap: 'wrap',
+          opacity: filteredGuests.length > 0 ? 1 : 0,
+          maxHeight: filteredGuests.length > 0 ? 60 : 0,
+          py: filteredGuests.length > 0 ? 1.5 : 0,
+          px: 1.5,
+          mb: filteredGuests.length > 0 ? 2 : 0,
+          overflow: 'hidden',
+          transition: 'opacity 0.3s ease, max-height 0.3s ease, padding 0.3s ease, margin 0.3s ease',
+        }}
+      >
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <EventAvailableIcon color="success" fontSize="small" />
+          <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+            <strong style={{ display: 'inline-block', minWidth: 20, textAlign: 'right' }}>{rsvpCounts.accepted}</strong> Attending
+          </Typography>
+        </Stack>
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <HelpOutlineIcon color="action" fontSize="small" />
+          <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+            <strong style={{ display: 'inline-block', minWidth: 20, textAlign: 'right' }}>{rsvpCounts.pending}</strong> Pending
+          </Typography>
+        </Stack>
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <EventBusyIcon color="error" fontSize="small" />
+          <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+            <strong style={{ display: 'inline-block', minWidth: 20, textAlign: 'right' }}>{rsvpCounts.declined}</strong> Declined
+          </Typography>
+        </Stack>
+      </Paper>
 
       {/* Guest List */}
       {filteredGuests.length === 0 ? (
-        <Alert severity="info" sx={{ mt: 2 }}>
+        <Alert severity="info" sx={{ mt: 2, animation: 'fadeIn 0.3s ease' }}>
           {searchTerm.trim()
             ? `No guests or families found matching "${searchTerm}".`
             : selectedCategories.length > 0
@@ -407,13 +421,13 @@ export default function GuestList({
         </Alert>
       ) : (
         <>
-          <Stack spacing={1.5}>
+          <Stack spacing={1.5} sx={{ '@keyframes fadeIn': { from: { opacity: 0 }, to: { opacity: 1 } } }}>
             {visibleList.map((item) => {
               if (item.type === 'family') {
                 return (
                   <Box
                     key={item.family.id}
-                    sx={{ contain: 'layout style paint', contentVisibility: 'auto', containIntrinsicSize: 'auto 80px' }}
+                    sx={{ contain: 'layout style paint', contentVisibility: 'auto', containIntrinsicSize: 'auto 80px', animation: 'fadeIn 0.3s ease' }}
                   >
                     <FamilyGroup
                       family={item.family}
@@ -440,7 +454,7 @@ export default function GuestList({
                 return (
                   <Box
                     key={item.guest.id}
-                    sx={{ contain: 'layout style paint', contentVisibility: 'auto', containIntrinsicSize: 'auto 60px' }}
+                    sx={{ contain: 'layout style paint', contentVisibility: 'auto', containIntrinsicSize: 'auto 60px', animation: 'fadeIn 0.3s ease' }}
                   >
                     <GuestItem
                       guest={item.guest}
@@ -480,16 +494,17 @@ export default function GuestList({
               gap: { xs: 1, sm: 3 },
               flexWrap: 'wrap',
               bgcolor: 'action.hover',
+              fontVariantNumeric: 'tabular-nums',
             }}
           >
             <Typography variant="body1">
-              Total: <strong>{totalGuests}</strong>
+              Total: <strong style={{ display: 'inline-block', minWidth: 24 }}>{totalGuests}</strong>
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Adults: <strong>{adultCount}</strong>
+              Adults: <strong style={{ display: 'inline-block', minWidth: 24 }}>{adultCount}</strong>
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Children: <strong>{childCount}</strong>
+              Children: <strong style={{ display: 'inline-block', minWidth: 24 }}>{childCount}</strong>
             </Typography>
           </Paper>
         </>

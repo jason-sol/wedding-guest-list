@@ -113,7 +113,8 @@ endif
 		echo "==> Rebuilding and restarting containers..." && \
 		export DOCKER_CONFIG=/tmp/.docker && \
 		mkdir -p /tmp/.docker && \
-		docker compose up -d --build && \
+		docker compose build --no-cache && \
+		docker compose up -d && \
 		echo "==> Waiting for health checks..." && \
 		sleep 10 && \
 		docker compose ps && \
