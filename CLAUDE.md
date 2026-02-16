@@ -175,7 +175,7 @@ MAX_TAGS_PER_GUEST=20
 DEPLOY_HOST=root@192.168.1.9
 DEPLOY_PASS=your_server_password
 DEPLOY_REPO=/DATA/.media/Cloud-Storage/wedding-guest-list
-DEPLOY_DATA_DIR=/DATA/AppData/wedding-guest-list/data
+# Data is stored in DEPLOY_REPO/data/ (bind-mounted into the container)
 ```
 
 **Note**: In production, `AUTH_USERNAME` and `AUTH_PASSWORD` are required. The server will fail to start without them. In development, it defaults to `dev/dev` with a warning.

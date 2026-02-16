@@ -102,6 +102,15 @@ endif
 		set -e && \
 		cd $(DEPLOY_REPO) && \
 		mkdir -p data/backups && \
+		echo "==> Ensuring data is in repo directory..." && \
+		OLD_DATA=/DATA/AppData/wedding-guest-list/data && \
+		if [ ! -f data/data.json ] && [ -f $$OLD_DATA/data.json ]; then \
+			echo "    Migrating data from $$OLD_DATA to repo data/..."; \
+			cp $$OLD_DATA/data.json data/data.json; \
+			cp $$OLD_DATA/sessions.json data/sessions.json 2>/dev/null || true; \
+			cp $$OLD_DATA/backups/*.json data/backups/ 2>/dev/null || true; \
+			echo "    Migration complete"; \
+		fi && \
 		echo "==> Backing up data..." && \
 		if [ -f data/data.json ]; then \
 			cp data/data.json "data/backups/data-$$(date +%Y%m%d-%H%M%S).json" && \
