@@ -13,8 +13,12 @@ node_modules/
 # Build output
 dist/
 
-# Data persistence
-data/
+# Data persistence (contents ignored, directory structure preserved via .gitkeep)
+data/*
+!data/.gitkeep
+!data/backups/
+data/backups/*
+!data/backups/.gitkeep
 
 # OS files
 .DS_Store

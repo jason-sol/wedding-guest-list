@@ -54,7 +54,12 @@ import EventBusyIcon from '@mui/icons-material/EventBusy';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import PersonIcon from '@mui/icons-material/Person';
 import ChildCareIcon from '@mui/icons-material/ChildCare';
+import MailIcon from '@mui/icons-material/Mail';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import TableRestaurantIcon from '@mui/icons-material/TableRestaurant';
 import { Guest, Family, CategoryInfo, RSVPStatus, AgeGroup } from './types';
+import { InvitationStatus } from './hooks/useFilteredGuests';
 import { fetchGuests, fetchFamilies, fetchCategories, fetchGuestPresence, importData, createEvent, GuestPresenceMap } from './api';
 import { useToast } from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
@@ -71,6 +76,8 @@ import ScrollToTop from './components/ScrollToTop';
 import ImportRsvpModal from './components/ImportRsvpModal';
 import ExportDataModal from './components/ExportDataModal';
 import BackupManagement from './components/BackupManagement';
+import Dashboard from './components/Dashboard';
+import SeatingChart from './components/SeatingChart';
 import { shouldUseWhiteText, getContrastAdjustedColor } from './components/CategoryTag';
 
 function App() {
@@ -85,6 +92,9 @@ function App() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedRsvpStatuses, setSelectedRsvpStatuses] = useState<RSVPStatus[]>([]);
   const [selectedAgeGroups, setSelectedAgeGroups] = useState<AgeGroup[]>([]);
+  const [selectedInvitationStatuses, setSelectedInvitationStatuses] = useState<InvitationStatus[]>([]);
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [showSeatingChart, setShowSeatingChart] = useState(false);
   const [searchInput, setSearchInput] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [showGuestForm, setShowGuestForm] = useState(false);
@@ -294,6 +304,7 @@ function App() {
   const deferredCategories = useDeferredValue(selectedCategories);
   const deferredRsvpStatuses = useDeferredValue(selectedRsvpStatuses);
   const deferredAgeGroups = useDeferredValue(selectedAgeGroups);
+  const deferredInvitationStatuses = useDeferredValue(selectedInvitationStatuses);
   const deferredSearchTerm = useDeferredValue(searchTerm);
 
   // Lightweight stats computation for the sticky search bar (single O(n) pass)
@@ -307,6 +318,12 @@ function App() {
     }
     if (deferredAgeGroups.length > 0) {
       filtered = filtered.filter(g => deferredAgeGroups.includes(g.ageGroup || 'adult'));
+    }
+    if (deferredInvitationStatuses.length > 0) {
+      filtered = filtered.filter(g => {
+        const status: InvitationStatus = g.invitationSent ? 'sent' : 'not-sent';
+        return deferredInvitationStatuses.includes(status);
+      });
     }
     if (deferredSearchTerm.trim()) {
       const s = deferredSearchTerm.toLowerCase().trim();
@@ -322,7 +339,7 @@ function App() {
       else adults++;
     }
     return { statsTotal: filtered.length, statsAdults: adults, statsChildren: children };
-  }, [guests, families, deferredCategories, deferredRsvpStatuses, deferredAgeGroups, deferredSearchTerm]);
+  }, [guests, families, deferredCategories, deferredRsvpStatuses, deferredAgeGroups, deferredInvitationStatuses, deferredSearchTerm]);
 
   if (isAuthenticated === false) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
@@ -523,6 +540,22 @@ function App() {
             >
               {canEdit ? 'Categories' : 'View Categories'}
             </Button>
+            <Button
+              variant="outlined"
+              startIcon={<DashboardIcon />}
+              onClick={() => setShowDashboard(true)}
+            >
+              Dashboard
+            </Button>
+            {canEdit && (
+              <Button
+                variant="outlined"
+                startIcon={<TableRestaurantIcon />}
+                onClick={() => setShowSeatingChart(true)}
+              >
+                Seating
+              </Button>
+            )}
             {user?.isOwner && (
               <>
                 <Button
@@ -691,7 +724,7 @@ function App() {
           </Box>
 
           {/* Age Group filter */}
-          <Box>
+          <Box sx={{ mb: 2 }}>
             <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1 }}>
               Filter by Age Group
             </Typography>
@@ -727,6 +760,49 @@ function App() {
                 size="small"
                 onClick={() => setSelectedAgeGroups([])}
                 sx={{ visibility: selectedAgeGroups.length > 0 ? 'visible' : 'hidden' }}
+              >
+                Clear
+              </Button>
+            </Stack>
+          </Box>
+
+          {/* Invitation Status filter */}
+          <Box>
+            <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1 }}>
+              Filter by Invitation Status
+            </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center" sx={{ minHeight: 32 }}>
+              {(['sent', 'not-sent'] as InvitationStatus[]).map((status) => {
+                const isSelected = selectedInvitationStatuses.includes(status);
+                const config = {
+                  'sent': { label: 'Sent', icon: <MailIcon sx={{ fontSize: '1rem' }} /> },
+                  'not-sent': { label: 'Not Sent', icon: <MailOutlineIcon sx={{ fontSize: '1rem' }} /> },
+                }[status];
+
+                return (
+                  <Chip
+                    key={status}
+                    label={config.label}
+                    icon={isSelected ? <CheckIcon sx={{ fontSize: '1rem' }} /> : config.icon}
+                    onClick={() => {
+                      startTransition(() => {
+                        if (isSelected) {
+                          setSelectedInvitationStatuses(selectedInvitationStatuses.filter(s => s !== status));
+                        } else {
+                          setSelectedInvitationStatuses([...selectedInvitationStatuses, status]);
+                        }
+                      });
+                    }}
+                    variant={isSelected ? 'filled' : 'outlined'}
+                    color={isSelected ? 'primary' : 'default'}
+                    sx={{ transition: 'background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease' }}
+                  />
+                );
+              })}
+              <Button
+                size="small"
+                onClick={() => setSelectedInvitationStatuses([])}
+                sx={{ visibility: selectedInvitationStatuses.length > 0 ? 'visible' : 'hidden' }}
               >
                 Clear
               </Button>
@@ -811,6 +887,7 @@ function App() {
             selectedCategories={deferredCategories}
             selectedRsvpStatuses={deferredRsvpStatuses}
             selectedAgeGroups={deferredAgeGroups}
+            selectedInvitationStatuses={deferredInvitationStatuses}
             searchTerm={deferredSearchTerm}
             onUpdate={handleUpdate}
             eventId={currentEvent.id}
@@ -956,6 +1033,24 @@ function App() {
             refreshEvents();
             loadData();
           }}
+        />
+      )}
+
+      {showDashboard && currentEvent && (
+        <Dashboard
+          guests={guests}
+          categories={categories}
+          events={events}
+          currentEventId={currentEvent.id}
+          onClose={() => setShowDashboard(false)}
+        />
+      )}
+
+      {showSeatingChart && currentEvent && (
+        <SeatingChart
+          guests={guests}
+          eventId={currentEvent.id}
+          onClose={() => setShowSeatingChart(false)}
         />
       )}
 

@@ -55,6 +55,23 @@ export interface Guest {
   rsvp?: RSVPStatus;
   dietaryRequirements?: string; // Dietary restrictions, allergies, etc.
   ageGroup?: AgeGroup;
+  invitationSent?: boolean;
+  invitationSentDate?: string; // ISO date
+}
+
+// Table shape for seating charts
+export type TableShape = 'round' | 'rectangular' | 'custom';
+
+// Table for seating chart
+export interface Table {
+  id: string;
+  eventId: string;
+  name: string;
+  capacity: number; // 1-50
+  seats: string[]; // Guest IDs
+  x: number; // Floor plan position (0-100%)
+  y: number;
+  shape: TableShape;
 }
 
 // Family data structure (now has eventId)

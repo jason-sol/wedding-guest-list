@@ -4,7 +4,7 @@
  * Supports multi-user permissions and event-scoped guest lists.
  */
 
-import { Guest, Family, CategoryInfo, User, Event, UserEventPermission, PermissionLevel, BackupSettings } from '../../shared/types/index';
+import { Guest, Family, CategoryInfo, User, Event, UserEventPermission, PermissionLevel, BackupSettings, Table } from '../../shared/types/index';
 import { getCategoryColor } from '../../shared/utils/colors';
 import * as fs from 'fs/promises';
 import { getConfig } from './config';
@@ -51,6 +51,7 @@ interface StoredData {
   events?: Event[];
   permissions?: UserEventPermission[];
   backupSettings?: BackupSettings;
+  tables?: Table[];
 }
 
 /**
@@ -62,11 +63,13 @@ class DataStore {
   private guests: Map<string, Guest> = new Map();
   private families: Map<string, Family> = new Map();
   private categories: Map<string, CategoryInfo> = new Map();
+  private tables: Map<string, Table> = new Map();
 
   // Secondary indexes for fast event-scoped and name-based lookups
   private guestsByEvent: Map<string, Set<string>> = new Map();    // eventId → guestIds
   private familiesByEvent: Map<string, Set<string>> = new Map();  // eventId → familyIds
   private guestsByName: Map<string, Set<string>> = new Map();     // "firstname|lastname" → guestIds
+  private tablesByEvent: Map<string, Set<string>> = new Map();    // eventId → tableIds
 
   // Multi-user data
   private users: Map<string, User> = new Map();
@@ -85,6 +88,7 @@ class DataStore {
   private nextFamilyId = 1;
   private nextUserId = 1;
   private nextEventId = 1;
+  private nextTableId = 1;
 
   // File persistence
   private dataFilePath: string;
@@ -172,16 +176,37 @@ class DataStore {
     }
   }
 
+  private addTableToIndex(table: Table): void {
+    let eventSet = this.tablesByEvent.get(table.eventId);
+    if (!eventSet) {
+      eventSet = new Set();
+      this.tablesByEvent.set(table.eventId, eventSet);
+    }
+    eventSet.add(table.id);
+  }
+
+  private removeTableFromIndex(table: Table): void {
+    const eventSet = this.tablesByEvent.get(table.eventId);
+    if (eventSet) {
+      eventSet.delete(table.id);
+      if (eventSet.size === 0) this.tablesByEvent.delete(table.eventId);
+    }
+  }
+
   private rebuildIndexes(): void {
     this.guestsByEvent.clear();
     this.familiesByEvent.clear();
     this.guestsByName.clear();
+    this.tablesByEvent.clear();
 
     for (const guest of this.guests.values()) {
       this.addGuestToIndexes(guest);
     }
     for (const family of this.families.values()) {
       this.addFamilyToIndex(family);
+    }
+    for (const table of this.tables.values()) {
+      this.addTableToIndex(table);
     }
   }
 
@@ -413,6 +438,17 @@ class DataStore {
         });
       }
 
+      // Load tables
+      if (parsed.tables && Array.isArray(parsed.tables)) {
+        parsed.tables.forEach((table: Table) => {
+          this.tables.set(table.id, table);
+          const idNum = parseInt(table.id.replace('table-', ''));
+          if (idNum >= this.nextTableId) {
+            this.nextTableId = idNum + 1;
+          }
+        });
+      }
+
       // Load backup settings
       if (parsed.backupSettings) {
         this.backupSettings = { ...this.backupSettings, ...parsed.backupSettings };
@@ -472,6 +508,7 @@ class DataStore {
         users: Array.from(this.users.values()),
         events: Array.from(this.events.values()),
         permissions: Array.from(this.permissions.values()),
+        tables: Array.from(this.tables.values()),
         backupSettings: this.backupSettings,
       };
 
@@ -604,6 +641,14 @@ class DataStore {
         }
       }
       this.familiesByEvent.delete(id);
+
+      // Delete all tables in this event
+      for (const [tableId, table] of this.tables.entries()) {
+        if (table.eventId === id) {
+          this.tables.delete(tableId);
+        }
+      }
+      this.tablesByEvent.delete(id);
 
       // Delete all permissions for this event
       for (const [key, perm] of this.permissions.entries()) {
@@ -1265,6 +1310,78 @@ class DataStore {
   }
 
   // ============================================================
+  // Table operations (event-scoped, seating chart)
+  // ============================================================
+
+  addTable(table: Omit<Table, 'id'>): Table {
+    const id = `table-${this.nextTableId++}`;
+    const newTable: Table = { ...table, id };
+    this.tables.set(id, newTable);
+    this.addTableToIndex(newTable);
+    this.scheduleSave();
+    return newTable;
+  }
+
+  getTable(id: string): Table | undefined {
+    return this.tables.get(id);
+  }
+
+  getAllTables(): Table[] {
+    return Array.from(this.tables.values());
+  }
+
+  getTablesForEvent(eventId: string): Table[] {
+    const ids = this.tablesByEvent.get(eventId);
+    if (!ids) return [];
+    return Array.from(ids).map(id => this.tables.get(id)!).filter(Boolean);
+  }
+
+  updateTable(id: string, updates: Partial<Omit<Table, 'id' | 'eventId'>>): Table | null {
+    const table = this.tables.get(id);
+    if (!table) return null;
+    const updated = { ...table, ...updates };
+    this.tables.set(id, updated);
+    this.scheduleSave();
+    return updated;
+  }
+
+  deleteTable(id: string): boolean {
+    const table = this.tables.get(id);
+    if (!table) return false;
+    this.removeTableFromIndex(table);
+    const deleted = this.tables.delete(id);
+    if (deleted) {
+      this.scheduleSave();
+    }
+    return deleted;
+  }
+
+  /**
+   * Assign guests to a table, removing them from other tables in the same event.
+   */
+  assignGuestsToTable(tableId: string, guestIds: string[]): Table | null {
+    const table = this.tables.get(tableId);
+    if (!table) return null;
+
+    // Remove these guests from any other tables in the same event
+    const eventTables = this.getTablesForEvent(table.eventId);
+    for (const otherTable of eventTables) {
+      if (otherTable.id === tableId) continue;
+      const hadGuests = otherTable.seats.length;
+      otherTable.seats = otherTable.seats.filter(id => !guestIds.includes(id));
+      if (otherTable.seats.length !== hadGuests) {
+        this.tables.set(otherTable.id, otherTable);
+      }
+    }
+
+    // Set the new seats for this table
+    table.seats = guestIds;
+    this.tables.set(tableId, table);
+    this.scheduleSave();
+    return table;
+  }
+
+  // ============================================================
   // Category operations (global - not event-scoped)
   // ============================================================
 
@@ -1354,13 +1471,16 @@ class DataStore {
     this.users.clear();
     this.events.clear();
     this.permissions.clear();
+    this.tables.clear();
     this.guestsByEvent.clear();
     this.familiesByEvent.clear();
     this.guestsByName.clear();
+    this.tablesByEvent.clear();
     this.nextGuestId = 1;
     this.nextFamilyId = 1;
     this.nextUserId = 1;
     this.nextEventId = 1;
+    this.nextTableId = 1;
     this.initializeDefaultCategories();
 
     try {
@@ -1382,6 +1502,7 @@ class DataStore {
     this.users.clear();
     this.events.clear();
     this.permissions.clear();
+    this.tables.clear();
 
     // Import categories
     data.categories.forEach((category) => {
@@ -1444,6 +1565,19 @@ class DataStore {
       });
     }
 
+    // Import tables
+    if (data.tables) {
+      let maxTableId = 0;
+      data.tables.forEach((table) => {
+        this.tables.set(table.id, table);
+        const idNum = parseInt(table.id.replace('table-', ''));
+        if (idNum >= maxTableId) {
+          maxTableId = idNum + 1;
+        }
+      });
+      this.nextTableId = maxTableId;
+    }
+
     // Rebuild all secondary indexes
     this.rebuildIndexes();
 
@@ -1461,6 +1595,7 @@ class DataStore {
       users: this.getAllUsers(),
       events: this.getAllEvents(),
       permissions: Array.from(this.permissions.values()),
+      tables: this.getAllTables(),
     };
   }
 }

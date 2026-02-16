@@ -10,7 +10,7 @@ import { parse } from 'csv-parse/sync';
 import { store } from '../store';
 import { Guest, Event, RSVPStatus } from '../../../shared/types/index';
 import { capitalizeWords } from '../../../shared/utils/capitalize';
-import { validate, CreateGuestSchema, UpdateGuestSchema, CopyGuestSchema, BulkRsvpUpdateSchema, JoyImportSchema } from '../validation';
+import { validate, CreateGuestSchema, UpdateGuestSchema, CopyGuestSchema, BulkRsvpUpdateSchema, BulkInvitationUpdateSchema, JoyImportSchema } from '../validation';
 import { sendSuccess, sendCreated, sendNoContent, sendNotFound, sendValidationError, sendError, sendServerError } from '../apiResponse';
 import { requireEventViewer, requireEventAdmin } from '../middleware/permissions';
 
@@ -127,7 +127,7 @@ router.post('/', requireEventAdmin, (req: Request, res: Response) => {
     return sendValidationError(res, validation.error, validation.details);
   }
 
-  const { firstName, lastName, familyId, tags, rsvp, dietaryRequirements, ageGroup } = validation.data;
+  const { firstName, lastName, familyId, tags, rsvp, dietaryRequirements, ageGroup, invitationSent, invitationSentDate } = validation.data;
 
   // If familyId provided, verify it belongs to this event
   if (familyId) {
@@ -165,6 +165,8 @@ router.post('/', requireEventAdmin, (req: Request, res: Response) => {
     rsvp,
     dietaryRequirements,
     ageGroup,
+    invitationSent,
+    invitationSentDate: invitationSent ? (invitationSentDate || new Date().toISOString()) : undefined,
   });
 
   // If added to a family, update the family's member list
@@ -200,7 +202,7 @@ router.put('/:id', requireEventAdmin, (req: Request, res: Response) => {
     return sendValidationError(res, validation.error, validation.details);
   }
 
-  const { firstName, lastName, familyId, tags, rsvp, dietaryRequirements, ageGroup } = validation.data;
+  const { firstName, lastName, familyId, tags, rsvp, dietaryRequirements, ageGroup, invitationSent, invitationSentDate } = validation.data;
 
   // If familyId provided, verify it belongs to this event
   if (familyId !== undefined && familyId !== null) {
@@ -218,6 +220,15 @@ router.put('/:id', requireEventAdmin, (req: Request, res: Response) => {
   if (rsvp !== undefined) updates.rsvp = rsvp;
   if (dietaryRequirements !== undefined) updates.dietaryRequirements = dietaryRequirements;
   if (ageGroup !== undefined) updates.ageGroup = ageGroup;
+  if (invitationSent !== undefined) {
+    updates.invitationSent = invitationSent;
+    // Auto-set date when toggled to true, clear when toggled to false
+    if (invitationSent && !guest.invitationSent) {
+      updates.invitationSentDate = invitationSentDate || new Date().toISOString();
+    } else if (!invitationSent) {
+      updates.invitationSentDate = undefined;
+    }
+  }
 
   // Handle family membership changes
   const oldFamilyId = guest.familyId;
@@ -329,6 +340,53 @@ router.post('/bulk-rsvp', requireEventAdmin, (req: Request, res: Response) => {
     }
 
     const updated = store.updateGuest(guestId, { rsvp });
+    if (updated) {
+      updatedGuests.push(updated);
+    } else {
+      errors.push(`Failed to update guest ${guestId}`);
+    }
+  }
+
+  sendSuccess(res, {
+    updated: updatedGuests.length,
+    guests: updatedGuests,
+    errors: errors.length > 0 ? errors : undefined,
+  });
+});
+
+// POST /api/events/:eventId/guests/bulk-invitation - Update invitation status for multiple guests (admin+)
+router.post('/bulk-invitation', requireEventAdmin, (req: Request, res: Response) => {
+  const eventId = req.params.eventId;
+
+  const validation = validate(BulkInvitationUpdateSchema, req.body);
+
+  if (!validation.success) {
+    return sendValidationError(res, validation.error, validation.details);
+  }
+
+  const { guestIds, invitationSent } = validation.data;
+  const updatedGuests: Guest[] = [];
+  const errors: string[] = [];
+
+  for (const guestId of guestIds) {
+    const guest = store.getGuest(guestId);
+    if (!guest) {
+      errors.push(`Guest ${guestId} not found`);
+      continue;
+    }
+    if (guest.eventId !== eventId) {
+      errors.push(`Guest ${guestId} does not belong to this event`);
+      continue;
+    }
+
+    const updates: Partial<Guest> = { invitationSent };
+    if (invitationSent && !guest.invitationSent) {
+      updates.invitationSentDate = new Date().toISOString();
+    } else if (!invitationSent) {
+      updates.invitationSentDate = undefined;
+    }
+
+    const updated = store.updateGuest(guestId, updates);
     if (updated) {
       updatedGuests.push(updated);
     } else {

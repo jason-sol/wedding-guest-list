@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
     volumes:
       - type: bind
-        source: /DATA/AppData/wedding-guest-list/data
+        source: ./data
         target: /app/data
         bind:
           create_host_path: true

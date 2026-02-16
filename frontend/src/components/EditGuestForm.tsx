@@ -59,6 +59,7 @@ export default function EditGuestForm({
   const [lastName, setLastName] = useState(guest.lastName);
   const [selectedTags, setSelectedTags] = useState<Category[]>(guest.tags || []);
   const [ageGroup, setAgeGroup] = useState<AgeGroup>(guest.ageGroup || 'adult');
+  const [invitationSent, setInvitationSent] = useState(guest.invitationSent || false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [nameSyncInfo, setNameSyncInfo] = useState<{ firstName: string; lastName: string } | null>(null);
@@ -90,6 +91,7 @@ export default function EditGuestForm({
     setLastName(guest.lastName);
     setSelectedTags(guest.tags || []);
     setAgeGroup(guest.ageGroup || 'adult');
+    setInvitationSent(guest.invitationSent || false);
     setSelectedEventIds(new Set(guestPresence.map(e => e.id)));
   }, [guest, guestPresence]);
 
@@ -103,6 +105,7 @@ export default function EditGuestForm({
         lastName: lastName.trim(),
         tags: selectedTags,
         ageGroup,
+        invitationSent,
       });
 
       const eventsToAdd = Array.from(selectedEventIds).filter(id => !alreadyInEventIds.has(id));
@@ -295,6 +298,19 @@ export default function EditGuestForm({
               setSelectedTags(selectedTags.filter(t => t !== category));
             }}
           />
+
+          <Box sx={{ mt: 3 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={invitationSent}
+                  onChange={(e) => setInvitationSent(e.target.checked)}
+                  disabled={isSubmitting}
+                />
+              }
+              label="Invitation Sent"
+            />
+          </Box>
 
           {otherAdminEvents.length > 0 && (
             <>

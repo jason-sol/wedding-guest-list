@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import guestsRouter from './routes/guests';
 import familiesRouter from './routes/families';
+import tablesRouter from './routes/tables';
 import categoriesRouter from './routes/categories';
 import eventsRouter from './routes/events';
 import usersRouter from './routes/users';
@@ -26,6 +27,7 @@ export function createApp() {
   app.use('/api/events', authMiddleware, eventsRouter);
   app.use('/api/events/:eventId/guests', authMiddleware, guestsRouter);
   app.use('/api/events/:eventId/families', authMiddleware, familiesRouter);
+  app.use('/api/events/:eventId/tables', authMiddleware, tablesRouter);
   app.use('/api/users', authMiddleware, requireOwner, usersRouter);
   app.use('/api/categories', authMiddleware, categoriesRouter);
   app.use('/api/data', authMiddleware, dataRouter);

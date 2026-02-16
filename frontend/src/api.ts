@@ -1,4 +1,4 @@
-import { Guest, Family, CategoryInfo, Event, UserEventPermission, PermissionLevel, RSVPStatus, BackupSettings } from './types';
+import { Guest, Family, CategoryInfo, Event, UserEventPermission, PermissionLevel, RSVPStatus, BackupSettings, Table } from './types';
 
 /**
  * Base URL for all API calls.
@@ -572,6 +572,31 @@ export async function bulkUpdateRsvp(
 }
 
 // ============================================================
+// Invitation Bulk Operations
+// ============================================================
+
+export interface BulkInvitationResult {
+  updated: number;
+  guests: Guest[];
+  errors?: string[];
+}
+
+export async function bulkUpdateInvitation(
+  eventId: string,
+  guestIds: string[],
+  invitationSent: boolean
+): Promise<BulkInvitationResult> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/guests/bulk-invitation`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ guestIds, invitationSent }),
+  });
+  handleAuthError(response);
+  if (!response.ok) await handleErrorResponse(response, 'Failed to update invitation status');
+  return extractData<BulkInvitationResult>(response);
+}
+
+// ============================================================
 // JOY CSV Import
 // ============================================================
 
@@ -696,4 +721,59 @@ export async function updateBackupSettings(settings: Partial<BackupSettings>): P
   handleAuthError(response);
   if (!response.ok) await handleErrorResponse(response, 'Failed to update backup settings');
   return extractData<BackupSettings>(response);
+}
+
+// ============================================================
+// Table operations (seating chart)
+// ============================================================
+
+export async function fetchTables(eventId: string): Promise<Table[]> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/tables`, {
+    headers: getAuthHeaders(),
+  });
+  handleAuthError(response);
+  if (!response.ok) await handleErrorResponse(response, 'Failed to fetch tables');
+  return extractData<Table[]>(response);
+}
+
+export async function addTable(eventId: string, table: { name: string; capacity: number; shape?: string; x?: number; y?: number }): Promise<Table> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/tables`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(table),
+  });
+  handleAuthError(response);
+  if (!response.ok) await handleErrorResponse(response, 'Failed to add table');
+  return extractData<Table>(response);
+}
+
+export async function updateTable(eventId: string, tableId: string, updates: Partial<Table>): Promise<Table> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/tables/${tableId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(updates),
+  });
+  handleAuthError(response);
+  if (!response.ok) await handleErrorResponse(response, 'Failed to update table');
+  return extractData<Table>(response);
+}
+
+export async function assignSeats(eventId: string, tableId: string, guestIds: string[]): Promise<Table> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/tables/${tableId}/assign`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ guestIds }),
+  });
+  handleAuthError(response);
+  if (!response.ok) await handleErrorResponse(response, 'Failed to assign seats');
+  return extractData<Table>(response);
+}
+
+export async function deleteTable(eventId: string, tableId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/events/${eventId}/tables/${tableId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  handleAuthError(response);
+  if (!response.ok) await handleErrorResponse(response, 'Failed to delete table');
 }

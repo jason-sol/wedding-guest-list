@@ -84,7 +84,9 @@ backup:
 export DEPLOY_HOST
 export DEPLOY_PASS
 export DEPLOY_REPO
-export DEPLOY_DATA_DIR
+
+# Data directory is now inside the git repo (./data), persisted via bind mount
+DEPLOY_DATA_DIR = $(DEPLOY_REPO)/data
 
 SSH := sshpass -p $(DEPLOY_PASS) ssh -o StrictHostKeyChecking=no $(DEPLOY_HOST)
 
@@ -98,16 +100,16 @@ endif
 	@echo "==> Deploying to $(DEPLOY_HOST)..."
 	@$(SSH) '\
 		set -e && \
+		cd $(DEPLOY_REPO) && \
+		mkdir -p data/backups && \
 		echo "==> Backing up data..." && \
-		if [ -f $(DEPLOY_DATA_DIR)/data.json ]; then \
-			mkdir -p $(DEPLOY_DATA_DIR)/backups && \
-			cp $(DEPLOY_DATA_DIR)/data.json "$(DEPLOY_DATA_DIR)/backups/data-$$(date +%Y%m%d-%H%M%S).json" && \
-			echo "    Backup saved to $(DEPLOY_DATA_DIR)/backups/"; \
+		if [ -f data/data.json ]; then \
+			cp data/data.json "data/backups/data-$$(date +%Y%m%d-%H%M%S).json" && \
+			echo "    Backup saved to data/backups/"; \
 		else \
 			echo "    No data.json found, skipping backup"; \
 		fi && \
 		echo "==> Pulling latest code..." && \
-		cd $(DEPLOY_REPO) && \
 		git stash --quiet 2>/dev/null; \
 		git pull && \
 		echo "==> Rebuilding and restarting containers..." && \
@@ -125,10 +127,11 @@ endif
 deploy-backup:
 	@echo "==> Backing up server data..."
 	@$(SSH) '\
-		if [ -f $(DEPLOY_DATA_DIR)/data.json ]; then \
-			mkdir -p $(DEPLOY_DATA_DIR)/backups && \
-			cp $(DEPLOY_DATA_DIR)/data.json "$(DEPLOY_DATA_DIR)/backups/data-$$(date +%Y%m%d-%H%M%S).json" && \
-			echo "Backup saved to $(DEPLOY_DATA_DIR)/backups/"; \
+		cd $(DEPLOY_REPO) && \
+		mkdir -p data/backups && \
+		if [ -f data/data.json ]; then \
+			cp data/data.json "data/backups/data-$$(date +%Y%m%d-%H%M%S).json" && \
+			echo "Backup saved to data/backups/"; \
 		else \
 			echo "No data.json found at $(DEPLOY_DATA_DIR)"; \
 		fi'
@@ -146,14 +149,14 @@ deploy-rollback:
 	@echo "==> Restoring most recent backup..."
 	@$(SSH) '\
 		set -e && \
-		LATEST=$$(ls -t $(DEPLOY_DATA_DIR)/backups/data-*.json 2>/dev/null | head -1) && \
+		cd $(DEPLOY_REPO) && \
+		LATEST=$$(ls -t data/backups/data-*.json 2>/dev/null | head -1) && \
 		if [ -z "$$LATEST" ]; then \
-			echo "No backups found in $(DEPLOY_DATA_DIR)/backups/"; \
+			echo "No backups found in data/backups/"; \
 			exit 1; \
 		fi && \
 		echo "    Restoring: $$LATEST" && \
-		cd $(DEPLOY_REPO) && \
 		docker compose stop backend && \
-		cp "$$LATEST" $(DEPLOY_DATA_DIR)/data.json && \
+		cp "$$LATEST" data/data.json && \
 		docker compose start backend && \
 		echo "==> Rollback complete. Restored from $$LATEST"'

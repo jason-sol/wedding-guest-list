@@ -68,6 +68,8 @@ export const CreateGuestSchema = z.object({
     .transform(s => s.replace(/[<>]/g, ''))
     .optional(),
   ageGroup: AgeGroupSchema.optional(),
+  invitationSent: z.boolean().optional(),
+  invitationSentDate: z.string().optional(),
 });
 
 /**
@@ -94,6 +96,8 @@ export const UpdateGuestSchema = z.object({
     .transform(s => s.replace(/[<>]/g, ''))
     .optional(),
   ageGroup: AgeGroupSchema.optional(),
+  invitationSent: z.boolean().optional(),
+  invitationSentDate: z.string().optional(),
 });
 
 /**
@@ -110,6 +114,8 @@ export const GuestSchema = z.object({
   rsvp: RSVPStatusSchema.optional(),
   dietaryRequirements: z.string().trim().max(500).optional(),
   ageGroup: AgeGroupSchema.optional(),
+  invitationSent: z.boolean().optional(),
+  invitationSentDate: z.string().optional(),
 });
 
 /**
@@ -125,6 +131,14 @@ export const CopyGuestSchema = z.object({
 export const BulkRsvpUpdateSchema = z.object({
   guestIds: z.array(z.string()).min(1, 'At least one guest ID is required'),
   rsvp: RSVPStatusSchema,
+});
+
+/**
+ * Schema for bulk invitation status update.
+ */
+export const BulkInvitationUpdateSchema = z.object({
+  guestIds: z.array(z.string()).min(1, 'At least one guest ID is required'),
+  invitationSent: z.boolean(),
 });
 
 /**
@@ -356,6 +370,67 @@ export const PermissionSchema = z.object({
 });
 
 // ============================================================
+// Table schemas (seating chart)
+// ============================================================
+
+/**
+ * Table shape enum.
+ */
+export const TableShapeSchema = z.enum(['round', 'rectangular', 'custom']);
+
+/**
+ * Schema for creating a table.
+ */
+export const CreateTableSchema = z.object({
+  name: z.string()
+    .trim()
+    .min(1, 'Table name is required')
+    .max(100, 'Table name cannot exceed 100 characters')
+    .transform(s => s.replace(/[<>]/g, '')),
+  capacity: z.number().int().min(1, 'Capacity must be at least 1').max(50, 'Capacity cannot exceed 50'),
+  shape: TableShapeSchema.optional().default('round'),
+  x: z.number().min(0).max(200).optional().default(80),
+  y: z.number().min(0).max(200).optional().default(50),
+});
+
+/**
+ * Schema for updating a table.
+ */
+export const UpdateTableSchema = z.object({
+  name: z.string()
+    .trim()
+    .min(1, 'Table name cannot be empty')
+    .max(100, 'Table name cannot exceed 100 characters')
+    .transform(s => s.replace(/[<>]/g, ''))
+    .optional(),
+  capacity: z.number().int().min(1).max(50).optional(),
+  shape: TableShapeSchema.optional(),
+  x: z.number().min(0).max(200).optional(),
+  y: z.number().min(0).max(200).optional(),
+});
+
+/**
+ * Schema for assigning guests to a table.
+ */
+export const AssignSeatsSchema = z.object({
+  guestIds: z.array(z.string()),
+});
+
+/**
+ * Full table schema (for import validation).
+ */
+export const TableSchema = z.object({
+  id: z.string().regex(/^table-\d+$/, 'Invalid table ID format'),
+  eventId: z.string().regex(/^event-\d+$/, 'Invalid event ID format'),
+  name: z.string().trim().min(1).max(100),
+  capacity: z.number().int().min(1).max(50),
+  seats: z.array(z.string()),
+  x: z.number().min(0).max(200),
+  y: z.number().min(0).max(200),
+  shape: TableShapeSchema,
+});
+
+// ============================================================
 // Import/Export schemas
 // ============================================================
 
@@ -370,6 +445,7 @@ export const ImportDataSchema = z.object({
   users: z.array(UserSchema).optional().default([]),
   events: z.array(EventSchema).optional().default([]),
   permissions: z.array(PermissionSchema).optional().default([]),
+  tables: z.array(TableSchema).optional().default([]),
 }).refine(
   (data) => {
     // Validate referential integrity: all familyIds in guests should exist
@@ -507,6 +583,10 @@ export type SetPermissionInput = z.infer<typeof SetPermissionSchema>;
 export type ImportDataInput = z.infer<typeof ImportDataSchema>;
 export type LoginInput = z.infer<typeof LoginSchema>;
 export type BulkRsvpUpdateInput = z.infer<typeof BulkRsvpUpdateSchema>;
+export type BulkInvitationUpdateInput = z.infer<typeof BulkInvitationUpdateSchema>;
 export type JoyImportInput = z.infer<typeof JoyImportSchema>;
+export type CreateTableInput = z.infer<typeof CreateTableSchema>;
+export type UpdateTableInput = z.infer<typeof UpdateTableSchema>;
+export type AssignSeatsInput = z.infer<typeof AssignSeatsSchema>;
 export type UpdateBackupSettingsInput = z.infer<typeof UpdateBackupSettingsSchema>;
 export type RestoreBackupInput = z.infer<typeof RestoreBackupSchema>;

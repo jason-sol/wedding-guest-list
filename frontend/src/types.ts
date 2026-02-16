@@ -12,4 +12,6 @@ export type {
   RSVPStatus,
   AgeGroup,
   BackupSettings,
+  Table,
+  TableShape,
 } from '../../shared/types/index';

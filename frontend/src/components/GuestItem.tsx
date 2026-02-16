@@ -24,6 +24,8 @@ import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RestaurantIcon from '@mui/icons-material/Restaurant';
+import MailIcon from '@mui/icons-material/Mail';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import ChildCareIcon from '@mui/icons-material/ChildCare';
 import { Guest, CategoryInfo, Event, PermissionLevel, RSVPStatus } from '../types';
 import { removeGuestFromFamily, updateGuest, fetchFamilies, GuestPresenceInfo } from '../api';
@@ -69,6 +71,7 @@ export default memo(function GuestItem({
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [isUpdatingRsvp, setIsUpdatingRsvp] = useState(false);
+  const [isUpdatingInvitation, setIsUpdatingInvitation] = useState(false);
   const [rsvpSyncInfo, setRsvpSyncInfo] = useState<{ status: RSVPStatus } | null>(null);
   const [showRemoveFamilySyncDialog, setShowRemoveFamilySyncDialog] = useState(false);
 
@@ -89,6 +92,19 @@ export default memo(function GuestItem({
       console.error('Failed to update RSVP:', error);
     } finally {
       setIsUpdatingRsvp(false);
+    }
+  };
+
+  const handleInvitationToggle = async () => {
+    if (readOnly || isUpdatingInvitation) return;
+    setIsUpdatingInvitation(true);
+    try {
+      await updateGuest(eventId, guest.id, { invitationSent: !guest.invitationSent });
+      onUpdate();
+    } catch (error) {
+      console.error('Failed to update invitation status:', error);
+    } finally {
+      setIsUpdatingInvitation(false);
     }
   };
 
@@ -254,6 +270,27 @@ export default memo(function GuestItem({
               {guest.dietaryRequirements && (
                 <Tooltip title={`Dietary: ${guest.dietaryRequirements}`}>
                   <RestaurantIcon fontSize="small" color="action" />
+                </Tooltip>
+              )}
+              {!readOnly && (
+                <Tooltip title={guest.invitationSent ? `Invitation sent${guest.invitationSentDate ? ` on ${new Date(guest.invitationSentDate).toLocaleDateString()}` : ''}` : 'Invitation not sent'}>
+                  <IconButton
+                    size="small"
+                    onClick={handleInvitationToggle}
+                    disabled={isUpdatingInvitation}
+                    sx={{ ml: 0.5 }}
+                  >
+                    {guest.invitationSent ? (
+                      <MailIcon fontSize="small" color="primary" />
+                    ) : (
+                      <MailOutlineIcon fontSize="small" color="action" />
+                    )}
+                  </IconButton>
+                </Tooltip>
+              )}
+              {readOnly && guest.invitationSent && (
+                <Tooltip title={`Invitation sent${guest.invitationSentDate ? ` on ${new Date(guest.invitationSentDate).toLocaleDateString()}` : ''}`}>
+                  <MailIcon fontSize="small" color="primary" />
                 </Tooltip>
               )}
             </Box>

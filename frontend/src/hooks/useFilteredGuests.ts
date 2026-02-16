@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { Guest, Family, RSVPStatus, AgeGroup } from '../types';
 
+export type InvitationStatus = 'sent' | 'not-sent';
+
 interface FilterOptions {
   guests: Guest[];
   selectedCategories: string[];
@@ -8,6 +10,7 @@ interface FilterOptions {
   selectedRsvpStatuses?: RSVPStatus[];
   families?: Family[];
   selectedAgeGroups?: AgeGroup[];
+  selectedInvitationStatuses?: InvitationStatus[];
 }
 
 /**
@@ -21,6 +24,7 @@ export function filterGuests({
   selectedRsvpStatuses = [],
   families = [],
   selectedAgeGroups = [],
+  selectedInvitationStatuses = [],
 }: FilterOptions): Guest[] {
   let filtered = guests;
 
@@ -45,6 +49,14 @@ export function filterGuests({
     filtered = filtered.filter(guest => {
       const guestAgeGroup = guest.ageGroup || 'adult';
       return selectedAgeGroups.includes(guestAgeGroup);
+    });
+  }
+
+  // Filter by invitation status
+  if (selectedInvitationStatuses.length > 0) {
+    filtered = filtered.filter(guest => {
+      const status: InvitationStatus = guest.invitationSent ? 'sent' : 'not-sent';
+      return selectedInvitationStatuses.includes(status);
     });
   }
 
@@ -84,10 +96,11 @@ export function useFilteredGuests(options: FilterOptions): Guest[] {
     selectedRsvpStatuses = [],
     families = [],
     selectedAgeGroups = [],
+    selectedInvitationStatuses = [],
   } = options;
 
   return useMemo(
-    () => filterGuests({ guests, selectedCategories, searchTerm, selectedRsvpStatuses, families, selectedAgeGroups }),
-    [guests, selectedCategories, searchTerm, selectedRsvpStatuses, families, selectedAgeGroups]
+    () => filterGuests({ guests, selectedCategories, searchTerm, selectedRsvpStatuses, families, selectedAgeGroups, selectedInvitationStatuses }),
+    [guests, selectedCategories, searchTerm, selectedRsvpStatuses, families, selectedAgeGroups, selectedInvitationStatuses]
   );
 }

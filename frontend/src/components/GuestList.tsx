@@ -22,12 +22,14 @@ import DeselectIcon from '@mui/icons-material/Deselect';
 import EventIcon from '@mui/icons-material/Event';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import RsvpIcon from '@mui/icons-material/Rsvp';
+import MailIcon from '@mui/icons-material/Mail';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { Guest, Family, CategoryInfo, Event, PermissionLevel, RSVPStatus, AgeGroup } from '../types';
-import { useFilteredGuests } from '../hooks/useFilteredGuests';
-import { GuestPresenceMap } from '../api';
+import { useFilteredGuests, InvitationStatus } from '../hooks/useFilteredGuests';
+import { GuestPresenceMap, bulkUpdateInvitation } from '../api';
 import GuestItem from './GuestItem';
 import FamilyGroup from './FamilyGroup';
 import BulkEventsModal from './BulkEventsModal';
@@ -45,6 +47,7 @@ interface GuestListProps {
   selectedCategories: string[];
   selectedRsvpStatuses?: RSVPStatus[];
   selectedAgeGroups?: AgeGroup[];
+  selectedInvitationStatuses?: InvitationStatus[];
   searchTerm: string;
   onUpdate: () => void;
   eventId: string;
@@ -60,6 +63,7 @@ export default function GuestList({
   selectedCategories,
   selectedRsvpStatuses = [],
   selectedAgeGroups = [],
+  selectedInvitationStatuses = [],
   searchTerm,
   onUpdate,
   eventId,
@@ -150,6 +154,7 @@ export default function GuestList({
     selectedCategories,
     selectedRsvpStatuses,
     selectedAgeGroups,
+    selectedInvitationStatuses,
     searchTerm,
     families: safeFamilies,
   });
@@ -257,22 +262,37 @@ export default function GuestList({
     return map;
   }, [filteredGuests]);
 
-  // Calculate RSVP and age group counts (memoized)
-  const { rsvpCounts, adultCount, childCount } = useMemo(() => {
-    let accepted = 0, declined = 0, pending = 0, adults = 0, children = 0;
+  // Calculate RSVP, age group, and invitation counts (memoized)
+  const { rsvpCounts, adultCount, childCount, invitationSentCount, invitationNotSentCount } = useMemo(() => {
+    let accepted = 0, declined = 0, pending = 0, adults = 0, children = 0, sent = 0, notSent = 0;
     for (const g of filteredGuests) {
       if (g.rsvp === 'accepted') accepted++;
       else if (g.rsvp === 'declined') declined++;
       else pending++;
       if (g.ageGroup === 'child') children++;
       else adults++;
+      if (g.invitationSent) sent++;
+      else notSent++;
     }
     return {
       rsvpCounts: { accepted, declined, pending },
       adultCount: adults,
       childCount: children,
+      invitationSentCount: sent,
+      invitationNotSentCount: notSent,
     };
   }, [filteredGuests]);
+
+  const handleBulkInvitation = useCallback(async (sent: boolean) => {
+    try {
+      await bulkUpdateInvitation(eventId, Array.from(selectedGuestIds), sent);
+      setSelectedGuestIds(new Set());
+      setSelectionMode(false);
+      onUpdate();
+    } catch (error) {
+      console.error('Failed to update invitation status:', error);
+    }
+  }, [eventId, selectedGuestIds, onUpdate]);
 
   return (
     <Box>
@@ -370,6 +390,22 @@ export default function GuestList({
             >
               Update RSVP
             </Button>
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<MailIcon />}
+              onClick={() => handleBulkInvitation(true)}
+            >
+              Mark Sent
+            </Button>
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<MailOutlineIcon />}
+              onClick={() => handleBulkInvitation(false)}
+            >
+              Mark Not Sent
+            </Button>
           </Stack>
         </Paper>
 
@@ -406,6 +442,19 @@ export default function GuestList({
           <EventBusyIcon color="error" fontSize="small" />
           <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
             <strong style={{ display: 'inline-block', minWidth: 20, textAlign: 'right' }}>{rsvpCounts.declined}</strong> Declined
+          </Typography>
+        </Stack>
+        <Box sx={{ borderLeft: 1, borderColor: 'divider', height: 20 }} />
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <MailIcon color="primary" fontSize="small" />
+          <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+            <strong style={{ display: 'inline-block', minWidth: 20, textAlign: 'right' }}>{invitationSentCount}</strong> Sent
+          </Typography>
+        </Stack>
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <MailOutlineIcon color="action" fontSize="small" />
+          <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+            <strong style={{ display: 'inline-block', minWidth: 20, textAlign: 'right' }}>{invitationNotSentCount}</strong> Not Sent
           </Typography>
         </Stack>
       </Paper>
